@@ -1,5 +1,12 @@
 import * as THREE from 'three'
-import { MeshBVH, MeshBVHUniformStruct, SAH, shaderStructs, shaderIntersectFunction } from 'three-mesh-bvh'
+import {
+  FloatVertexAttributeTexture,
+  MeshBVH,
+  MeshBVHUniformStruct,
+  SAH,
+  shaderStructs,
+  shaderIntersectFunction,
+} from 'three-mesh-bvh'
 
 /**
  * 분산 품질
@@ -61,9 +68,11 @@ export interface DiamondMaterialOptions {
  * 출력은 톤매핑 전 선형 HDR — 톤매핑은 후처리(ToneMapping 이펙트)가 담당. 화면에 직접 그릴 때만
  * colorspace_fragment가 sRGB로 인코딩한다 (렌더 타깃에서는 항등).
  * geometry는 이 재질을 쓰는 메시의 geometry와 같아야 한다 (BVH가 그 로컬 공간에서 추적).
+ * geometry.userData.smoothNormals(둥근 스톤)면 진입·내부 반사·탈출에 normal 속성을 히트 지점마다 보간해 쓴다.
  */
 export class DiamondMaterial extends THREE.ShaderMaterial {
   private readonly bvhUniform: MeshBVHUniformStruct
+  private readonly normalTexture: FloatVertexAttributeTexture | null
   /** 요청된 가림 정도 — 맵이 없으면(컷 미리보기 등) 빈 텍스처가 전부 '막힘'으로 읽히므로 uniform은 0으로 둔다 */
   private settingStrength = 0
 
@@ -73,11 +82,16 @@ export class DiamondMaterial extends THREE.ShaderMaterial {
     // 자기 교차 회피 오프셋 — Jewel_test(반지름≈1 모델)의 0.0008을 스톤 크기에 비례시켜 단위(mm/m)와 무관하게
     geometry.computeBoundingSphere()
     const rayEpsilon = geometry.boundingSphere!.radius * 0.0008
+    // 컷 스톤은 define이 없어 셰이더 소스가 예전과 같다
+    const normalTexture = geometry.userData.smoothNormals ? new FloatVertexAttributeTexture() : null
+    normalTexture?.updateFrom(geometry.getAttribute('normal') as THREE.BufferAttribute)
 
     super({
       toneMapped: false,
+      defines: normalTexture ? { SMOOTH_NORMALS: '' } : {},
       uniforms: {
         bvh: { value: bvhUniform },
+        normalAttribute: { value: normalTexture },
         rayEpsilon: { value: rayEpsilon },
         envMap: { value: null },
         envRotation: { value: new THREE.Matrix3() },
@@ -146,6 +160,16 @@ export class DiamondMaterial extends THREE.ShaderMaterial {
         varying vec3 vLocalPosition;
         varying vec3 vLocalNormal;
         varying vec3 vLocalCameraPosition;
+
+        #ifdef SMOOTH_NORMALS
+        uniform sampler2D normalAttribute;
+
+        // 히트 지점의 보간 법선을 faceNormal처럼 광선 반대쪽으로 맞춘다 — 그래도 광선과 같은 쪽이면 면 법선
+        vec3 hitNormal(uvec4 faceIndices, vec3 barycoord, vec3 faceNormal, float side, vec3 rayDir) {
+          vec3 smoothNormal = side * normalize(textureSampleBarycoord(normalAttribute, barycoord, faceIndices.xyz).xyz);
+          return dot(smoothNormal, rayDir) < 0.0 ? smoothNormal : faceNormal;
+        }
+        #endif
 
         vec3 sampleEnv(vec3 worldDir) {
           vec3 envColor = textureLod(envMap, envRotation * normalize(worldDir), envBlur).rgb * envMapIntensity;
@@ -227,6 +251,9 @@ export class DiamondMaterial extends THREE.ShaderMaterial {
 
             // faceNormal은 광선 반대쪽을 향하도록 정렬돼 나온다
             vec3 inwardNormal = normalize(faceNormal);
+            #ifdef SMOOTH_NORMALS
+            inwardNormal = hitNormal(faceIndices, barycoord, inwardNormal, side, rayDir);
+            #endif
             float cosThetaI = clamp(-dot(rayDir, inwardNormal), 0.0, 1.0);
             float reflCoeff = fresnelDielectric(cosThetaI, channelIOR, 1.0);
 
@@ -311,10 +338,17 @@ export class DiamondMaterial extends THREE.ShaderMaterial {
           mat3 normalToWorld = transpose(inverse(mat3(modelMatrix)));
           vec3 localViewDir = normalize(vLocalPosition - vLocalCameraPosition);
           vec3 localNormal = normalize(vLocalNormal);
+          #ifndef SMOOTH_NORMALS
           if (dot(localViewDir, localNormal) > 0.0) localNormal = -localNormal;
+          #endif
           // 이 삼각형 평면 위에서 이웃 픽셀까지의 위치 변화 — 서브픽셀 광선 방향을 만든다
           vec3 dpdx = dFdx(vLocalPosition);
           vec3 dpdy = dFdy(vLocalPosition);
+          #ifdef SMOOTH_NORMALS
+          vec3 rasterFaceNormal = normalize(cross(dpdx, dpdy));
+          if (dot(localViewDir, rasterFaceNormal) > 0.0) rasterFaceNormal = -rasterFaceNormal;
+          if (dot(localViewDir, localNormal) >= 0.0) localNormal = rasterFaceNormal;
+          #endif
 
           // 샘플 1개면 래스터 진입점, 여러 개면 서브픽셀 광선을 카메라에서 다시 쏴 그 지점의 실제 진입 facet을 찾는다.
           // shadeEntry 호출 지점은 하나 (인라인 사본 최소화)
@@ -338,6 +372,9 @@ export class DiamondMaterial extends THREE.ShaderMaterial {
                 entry = vLocalCameraPosition + subDir * dist;
                 dir = subDir;
                 entryNormal = normalize(faceNormal);
+                #ifdef SMOOTH_NORMALS
+                entryNormal = hitNormal(faceIndices, barycoord, entryNormal, side, subDir);
+                #endif
               }
             }
             finalColor += shadeEntry(entry, dir, entryNormal, normalToWorld);
@@ -355,6 +392,7 @@ export class DiamondMaterial extends THREE.ShaderMaterial {
     })
 
     this.bvhUniform = bvhUniform
+    this.normalTexture = normalTexture
     this.update(options)
   }
 
@@ -382,6 +420,7 @@ export class DiamondMaterial extends THREE.ShaderMaterial {
 
   dispose() {
     this.bvhUniform.dispose()
+    this.normalTexture?.dispose()
     super.dispose()
   }
 }

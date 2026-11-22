@@ -12,11 +12,13 @@ export function toFacetedGeometry(geometry: THREE.BufferGeometry) {
  * 한 메시에 합쳐진 여러 스톤을 연결 성분(스톤 1개)마다 각면 geometry로 나눈다.
  * 레이트레이서는 스톤마다 BVH·광선 오프셋·품질(센터/pavé)을 따로 잡아야 한다 —
  * 합쳐 두면 수십 개 pavé가 전부 센터석 품질로 추적되고 오프셋도 링 전체 크기 기준이 된다.
+ * smooth(플러그인이 둥근 스톤으로 표시한 파트)면 입력 normal을 그대로 옮기고 userData.smoothNormals를 켠다.
  * 결과 geometry는 원본과 같은 로컬 공간에 있다.
  */
-export function splitFacetedStones(geometry: THREE.BufferGeometry): THREE.BufferGeometry[] {
+export function splitFacetedStones(geometry: THREE.BufferGeometry, smooth = false): THREE.BufferGeometry[] {
   const source = geometry.index ? geometry.toNonIndexed() : geometry
   const position = source.getAttribute('position')
+  const normal = source.getAttribute('normal')
   const triCount = position.count / 3
 
   // 면마다 분리된 정점도 같은 위치면 같은 키 — 삼각형 연결성 판단용
@@ -57,15 +59,22 @@ export function splitFacetedStones(geometry: THREE.BufferGeometry): THREE.Buffer
 
   const result = [...stones.values()].map((tris) => {
     const array = new Float32Array(tris.length * 9)
+    const normals = smooth ? new Float32Array(tris.length * 9) : null
     tris.forEach((tri, j) => {
       for (let corner = 0; corner < 3; corner++) {
         const v = tri * 3 + corner
         array.set([position.getX(v), position.getY(v), position.getZ(v)], j * 9 + corner * 3)
+        normals?.set([normal.getX(v), normal.getY(v), normal.getZ(v)], j * 9 + corner * 3)
       }
     })
     const stone = new THREE.BufferGeometry()
     stone.setAttribute('position', new THREE.BufferAttribute(array, 3))
-    stone.computeVertexNormals()
+    if (normals) {
+      stone.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
+      stone.userData.smoothNormals = true
+    } else {
+      stone.computeVertexNormals()
+    }
     return stone
   })
   if (source !== geometry) source.dispose()

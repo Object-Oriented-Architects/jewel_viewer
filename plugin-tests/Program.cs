@@ -31,11 +31,11 @@ internal static partial class Program
         Directory.CreateDirectory(Temp);
         var tests = new (string Name, Func<Task> Run)[]
         {
-            ("RVM2 독립 golden·디코드", () => Sync(Golden)),
-            ("RVS1 오프셋·정렬·HTML base64·EXE trailer", () => Sync(Container)),
+            ("RVM3 독립 golden·디코드·UV·둥근 플래그", () => Sync(Golden)),
+            ("RVS1 오프셋·정렬·텍스처 블록·HTML base64·EXE trailer", () => Sync(Container)),
             ("200MiB 스트리밍 메모리 한도", () => Sync(MemoryBudget)),
             ("1000개 중 1개 증분·전체 재동기화", () => Sync(Incremental)),
-            ("같은 메시 재빌드 rev 유지·kind 변경 rev 증가", () => Sync(StableRevision)),
+            ("같은 메시 재빌드 rev 유지·kind·둥근 플래그 변경 rev 증가", () => Sync(StableRevision)),
             ("진행 중 dirty·delete·문서 전환", () => Sync(Races)),
             ("Replace Delete→Add가 사이클과 겹쳐도 매니페스트 유지", () => Sync(ReplaceRace)),
             ("숨김 dirty·메타데이터 전용·생성 한 번", () => Sync(Hidden)),
@@ -44,18 +44,19 @@ internal static partial class Program
             ("테이블 이벤트 배치·중복 제거", () => Sync(DependencyBatch)),
             ("Import·Paste형 Merge 이벤트는 추가 객체만 dirty", () => Sync(ImportSequence)),
             ("재질 source·인덱스·중첩 상속", () => Sync(MaterialResolution)),
-            ("실패 참조·추가·삭제·교체 영향", () => Sync(MaterialImpact)),
-            ("재질 이벤트 값 비교·최상위·Ignore 판정", () => Sync(MaterialEvents)),
-            ("재질 kind 변화·값 정규화", () => Sync(MaterialValues)),
+            ("실패 참조·추가·삭제·교체 영향·참조 재질 텍스처만", () => Sync(MaterialImpact)),
+            ("재질 이벤트 값 비교·텍스처 교체·최상위·Ignore 판정", () => Sync(MaterialEvents)),
+            ("재질 kind 변화·값 정규화·텍스처 id·형식", () => Sync(MaterialValues)),
             ("재질 표만 변경할 때 메시·rev 유지", () => Sync(MaterialMetadata)),
-            ("C#→JS GUID·RVM2·재질 검증", () => Sync(WebProtocol)),
+            ("C#→JS GUID·RVM3 UV·둥근 플래그·재질·텍스처 왕복", () => Sync(WebProtocol)),
+            ("보석 재질·사용자 텍스트 태그로 둥근 플래그 판정", () => Sync(StoneTag)),
             ("pull 실행 중 새 신호·재시도·페이지 전환", () => Sync(PullRace)),
             ("C1 정확한 스크립트·카메라 직렬화", () => Sync(Camera)),
             ("임베드 묶음·누락·손상·경로 검증", () => Sync(AssetBundle)),
             ("메모리 서버 정규화·index·MIME·live 우선", MemoryServer),
             ("디스크 소스 접두사·상대/절대 경로 이탈", () => Sync(DiskSourceBoundary)),
             ("스트림 EXE 템플릿·소유권·비탐색 입력", () => Sync(StreamTemplate)),
-            ("서버 경로·보관·보안·인코딩", Server),
+            ("서버 경로·보관·텍스처 발행·회수·보안·인코딩", Server),
             ("새 rev 발행과 1000 HTTP state+object 동시 요청", Concurrency)
         };
         foreach (var (name, run) in tests)
@@ -105,7 +106,7 @@ internal static partial class Program
         }
     }
 
-    private static MeshObject Small(double offset = 0, byte kind = 0) => new(new(10 + offset, 20, 30), new[]
+    private static MeshObject Small(double offset = 0, byte kind = 0, bool smooth = false) => new(new(10 + offset, 20, 30), new[]
     {
         new MeshPart(kind, kind == 0 ? Guid.Empty : TestMaterial,
             new float[]
@@ -120,7 +121,14 @@ internal static partial class Program
                 0, 0, 1,
                 0, 0, 1
             },
-            new uint[] { 0, 1, 2 }),
+            new float[]
+            {
+                0, 0,
+                1, 0,
+                0, 1
+            },
+            new uint[] { 0, 1, 2 },
+            false),
         new MeshPart(2, TestMaterial,
             new float[]
             {
@@ -134,7 +142,9 @@ internal static partial class Program
                 0, 0, 1,
                 0, 0, 1
             },
-            new uint[] { 0, 1, 2 })
+            null,
+            new uint[] { 0, 1, 2 },
+            smooth)
     });
 
     private static byte[] Gunzip(byte[] bytes)
@@ -167,32 +177,40 @@ internal static partial class Program
     private static void Golden()
     {
         // 직렬화 대상 구현으로 만들지 않은 고정 little-endian 바이트를 기준으로 삼는다.
-        const string header = "52564D32 02000000 0000000000002440 0000000000003440 0000000000003E40";
+        const string header = "52564D33 02000000 0000000000002440 0000000000003440 0000000000003E40";
         const string normal = "00000000 00000000 0000803F 00000000 00000000 0000803F 00000000 00000000 0000803F";
+        const string uvs = "00000000 00000000 0000803F 00000000 00000000 0000803F";
         const string indices = "00000000 01000000 02000000";
-        const string first = "00000000 00000000000000000000000000000000 03000000 03000000 " +
+        const string first = "00010000 00000000000000000000000000000000 03000000 03000000 " +
             "00000000 00000000 00000000 0000803F 00000000 00000000 00000000 0000803F 00000000";
-        const string second = "02000000 33221100554477668899AABBCCDDEEFF 03000000 03000000 " +
+        const string second = "33221100554477668899AABBCCDDEEFF 03000000 03000000 " +
             "00000000 00000000 0000803F 0000803F 00000000 0000803F 00000000 0000803F 0000803F";
-        var expected = Convert.FromHexString(
-            string.Join(" ", header, first, normal, indices, second, normal, indices).Replace(" ", ""));
-        var payload = MeshPayload.Write(Small());
-        Bytes(expected, Gunzip(payload));
-        var decoded = MeshPayloadReader.Read(payload);
-        Equal(Small().Origin, decoded.Origin);
-        Equal(2, decoded.Parts.Count);
-        for (int index = 0; index < 2; index++)
+        foreach (var (smooth, secondHeader) in new[] { (false, "02000000"), (true, "02020000") })
         {
-            var original = Small().Parts[index];
-            var actual = decoded.Parts[index];
-            Equal(original.Kind, actual.Kind);
-            Equal(original.MaterialId, actual.MaterialId);
-            Check(original.Positions.SequenceEqual(actual.Positions));
-            Check(original.Normals.SequenceEqual(actual.Normals));
-            Check(original.Indices.SequenceEqual(actual.Indices));
+            var expected = Convert.FromHexString(string.Join(" ",
+                header, first, normal, uvs, indices, secondHeader, second, normal, indices).Replace(" ", ""));
+            var payload = MeshPayload.Write(Small(smooth: smooth));
+            Bytes(expected, Gunzip(payload));
+            var decoded = MeshPayloadReader.Read(payload);
+            Equal(Small().Origin, decoded.Origin);
+            Equal(2, decoded.Parts.Count);
+            for (int index = 0; index < 2; index++)
+            {
+                var original = Small(smooth: smooth).Parts[index];
+                var actual = decoded.Parts[index];
+                Equal(original.Kind, actual.Kind);
+                Equal(original.MaterialId, actual.MaterialId);
+                Equal(original.Smooth, actual.Smooth);
+                Check(original.Positions.SequenceEqual(actual.Positions));
+                Check(original.Normals.SequenceEqual(actual.Normals));
+                Equal(original.Uvs == null, actual.Uvs == null);
+                Check((original.Uvs ?? Array.Empty<float>()).SequenceEqual(actual.Uvs ?? Array.Empty<float>()));
+                Check(original.Indices.SequenceEqual(actual.Indices));
+            }
+            Bytes(expected, Gunzip(MeshPayload.Write(decoded)));
         }
-        Bytes(expected, Gunzip(MeshPayload.Write(decoded)));
-        var empty = new MeshPart(0, Guid.Empty, Array.Empty<float>(), Array.Empty<float>(), Array.Empty<uint>());
+        var empty = new MeshPart(
+            0, Guid.Empty, Array.Empty<float>(), Array.Empty<float>(), null, Array.Empty<uint>(), false);
         Equal(0, MeshPayloadReader.Read(MeshPayload.Write(new(new(0, 0, 0), new[] { empty }))).Parts.Count);
     }
 
@@ -206,7 +224,7 @@ internal static partial class Program
         {
             var objects = Enumerable.Range(0, count).Select(index => Object(index)).ToArray();
             var frame = SceneFrame.Calculate(objects.Select(obj => obj.Box));
-            var presentation = new Presentation("#abcdef", "{\"parallel\":true}", TestMaterials());
+            var presentation = new Presentation("#abcdef", "{\"parallel\":true}", TestMaterials(), TestTextures());
             using var rvs = new MemoryStream();
             SceneExport.WriteRvs(rvs, objects, frame, presentation);
             var bytes = rvs.ToArray();
@@ -236,6 +254,13 @@ internal static partial class Program
                 Bytes(objects[index].Payload, bytes.AsSpan(data + (int)offset, objects[index].Payload.Length).ToArray());
                 offset += objects[index].Payload.Length;
             }
+            Equal(1, root.GetProperty("textures").GetArrayLength());
+            var texture = root.GetProperty("textures")[0];
+            Equal(TestTextureId, texture.GetProperty("id").GetString());
+            Equal(offset, texture.GetProperty("offset").GetInt64());
+            Equal(TestTexture.Length, texture.GetProperty("length").GetInt32());
+            Bytes(TestTexture, bytes.AsSpan(data + (int)offset, TestTexture.Length).ToArray());
+            offset += TestTexture.Length;
             Equal(data + offset, bytes.LongLength);
 
             const string shell = "<!doctype html><head>한글</head><body>ß</body>";
@@ -285,7 +310,7 @@ internal static partial class Program
         var path = Path.Combine(Temp, "large.html");
         using (var stream = File.Create(path))
         {
-            SceneExport.WriteHtml(stream, "<head></head>", objects, new(new(0, 0, 0), 1), new("#ffffff", null, new Dictionary<Guid, MaterialDescriptor>()));
+            SceneExport.WriteHtml(stream, "<head></head>", objects, new(new(0, 0, 0), 1), new("#ffffff", null, new Dictionary<Guid, MaterialDescriptor>(), new Dictionary<string, byte[]>()));
         }
         process.Refresh();
         var increase = process.PeakWorkingSet64 - before;
@@ -349,7 +374,7 @@ internal static partial class Program
         public Presentation Presentation(SceneFrame frame)
         {
             PresentationCalls++;
-            return new(Background, null, Materials);
+            return new(Background, null, Materials, new Dictionary<string, byte[]>());
         }
 
         private sealed class Snapshot : ISceneSnapshot
@@ -500,6 +525,13 @@ internal static partial class Program
         engine.Start();
         ui.Until(() => !engine.Running);
         Check(Revisions(store)[id] > before, "재질 id만 바뀐 지정을 놓침");
+        before = Revisions(store)[id];
+        changed = changed with { Parts = changed.Parts.Select(part => part with { Smooth = part.Kind == 2 }).ToArray() };
+        fake.Objects[id] = new(MeshPayload.Write(changed), MeshPayloadReader.Bounds(changed));
+        engine.Dirty(id);
+        engine.Start();
+        ui.Until(() => !engine.Running);
+        Check(Revisions(store)[id] > before, "둥근 플래그만 바뀐 메시를 놓침");
     }
 
     /// <summary>
@@ -859,7 +891,7 @@ internal static partial class Program
         var obj = Object();
         var frame = SceneFrame.Calculate(new[] { obj.Box });
         Equal(404, (await Request(server.Port, "/live/state.json")).Status);
-        store.Publish(new[] { obj }, frame, new("#fff", null, new Dictionary<Guid, MaterialDescriptor>()));
+        store.Publish(new[] { obj }, frame, new("#fff", null, new Dictionary<Guid, MaterialDescriptor>(), new Dictionary<string, byte[]>()));
         var state = await Request(server.Port, "/live/state.json");
         Equal(200, state.Status);
         Check(state.Headers.Contains("Cache-Control: no-store"));
@@ -867,13 +899,23 @@ internal static partial class Program
         Equal(200, response.Status);
         Bytes(obj.Payload, response.Body);
         Check(!response.Headers.Contains("Content-Encoding", StringComparison.OrdinalIgnoreCase));
-        Equal("RVM2", Encoding.ASCII.GetString(Gunzip(response.Body), 0, 4));
+        Equal("RVM3", Encoding.ASCII.GetString(Gunzip(response.Body), 0, 4));
         var second = new SceneObject(obj.Id, 2, obj.Payload, obj.Box);
-        store.Publish(new[] { second }, frame, new("#fff", null, new Dictionary<Guid, MaterialDescriptor>()));
+        store.Publish(new[] { second }, frame, new("#fff", null, new Dictionary<Guid, MaterialDescriptor>(), new Dictionary<string, byte[]>()));
         Equal(200, (await Request(server.Port, obj.Url)).Status);
-        store.Publish(new[] { new SceneObject(obj.Id, 3, obj.Payload, obj.Box) }, frame, new("#fff", null, new Dictionary<Guid, MaterialDescriptor>()));
+        store.Publish(new[] { new SceneObject(obj.Id, 3, obj.Payload, obj.Box) }, frame, new("#fff", null, new Dictionary<Guid, MaterialDescriptor>(), new Dictionary<string, byte[]>()));
         Equal(404, (await Request(server.Port, obj.Url)).Status);
         Equal(200, (await Request(server.Port, second.Url)).Status);
+        var textureUrl = SceneJson.TextureUrl(TestTextureId);
+        Equal(404, (await Request(server.Port, textureUrl)).Status);
+        store.Publish(new[] { second }, frame, new("#fff", null, TestMaterials(), TestTextures()));
+        var image = await Request(server.Port, textureUrl);
+        Equal(200, image.Status);
+        Bytes(TestTexture, image.Body);
+        store.Publish(new[] { second }, frame, new("#fff", null, new Dictionary<Guid, MaterialDescriptor>(), new Dictionary<string, byte[]>()));
+        Equal(200, (await Request(server.Port, textureUrl)).Status);
+        store.Publish(new[] { second }, frame, new("#fff", null, new Dictionary<Guid, MaterialDescriptor>(), new Dictionary<string, byte[]>()));
+        Equal(404, (await Request(server.Port, textureUrl)).Status);
         Equal(403, (await Request(server.Port, "/", "evil.test:" + server.Port)).Status);
         Equal(403, (await Request(server.Port, "/", "")).Status);
         Equal(403, (await Request(server.Port, "/", "127.0.0.1:" + server.Port + "\r\nHost: evil.test")).Status);
@@ -900,7 +942,7 @@ internal static partial class Program
         using var server = new StaticFileServer(new DiskFileSource(root), store);
         var current = Object();
         var frame = SceneFrame.Calculate(new[] { current.Box });
-        store.Publish(new[] { current }, frame, new("#fff", null, new Dictionary<Guid, MaterialDescriptor>()));
+        store.Publish(new[] { current }, frame, new("#fff", null, new Dictionary<Guid, MaterialDescriptor>(), new Dictionary<string, byte[]>()));
         var requests = 0;
         for (int round = 1; round <= 100; round++)
         {
@@ -915,7 +957,7 @@ internal static partial class Program
             var publisher = Task.Run(async () =>
             {
                 await start.Task;
-                store.Publish(new[] { next }, frame, new("#fff", null, new Dictionary<Guid, MaterialDescriptor>()));
+                store.Publish(new[] { next }, frame, new("#fff", null, new Dictionary<Guid, MaterialDescriptor>(), new Dictionary<string, byte[]>()));
             });
             var readers = Enumerable.Range(0, 10).Select(async index =>
             {

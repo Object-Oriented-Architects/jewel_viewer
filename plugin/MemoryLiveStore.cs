@@ -22,6 +22,12 @@ internal sealed class MemoryLiveStore
                 _payloads[obj.Url] = obj.Payload;
                 urls.Add(obj.Url);
             }
+            foreach (var (id, image) in presentation.Textures)
+            {
+                var url = SceneJson.TextureUrl(id);
+                _payloads[url] = image;
+                urls.Add(url);
+            }
 
             _manifests.Enqueue(urls);
             while (_manifests.Count > 2)

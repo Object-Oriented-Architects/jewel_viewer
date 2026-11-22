@@ -6,6 +6,28 @@ export type StudioPreset = (typeof STUDIO_PRESETS)[number]
 export const isStudioPreset = (value: string): value is StudioPreset =>
   (STUDIO_PRESETS as readonly string[]).includes(value)
 
+export interface WhiteGemParams {
+  flagCount: number
+  /** 평균 폭 — 플래그는 5:7 폭으로 번갈아 선다 */
+  flagWidth: number
+  /** 굵은 상부 검은 링의 고도(도) */
+  ringElevation: number
+  ringThickness: number
+  /** 바닥색 배율 */
+  floorBrightness: number
+  /** 천장·옆 밝은 패널 세기 배율 */
+  panelIntensity: number
+}
+
+export const WHITE_GEM_PARAMS: WhiteGemParams = {
+  flagCount: 6,
+  flagWidth: 6,
+  ringElevation: 45,
+  ringThickness: 3.2,
+  floorBrightness: 1,
+  panelIntensity: 1,
+}
+
 /**
  * 보석 촬영 스튜디오 환경을 절차적으로 만들어 cube에 렌더한다 (Jewel_test StudioEnvGenerator 이식 + 하이키 프리셋).
  * 다이아몬드는 환경을 비출 뿐이라 환경의 명암 대비가 facet의 흑백 대비와 분산(fire)을 만든다.
@@ -14,10 +36,8 @@ export const isStudioPreset = (value: string): value is StudioPreset =>
  * 금속과 보석은 따로 비춘다 (ijewel도 보석 전용 envMap) — 보석 대비용 검은 영역이 금속에 비치면 밴드가 어두워진다.
  * white_metal: 상부 검은 링 없이 좁은 플래그만 — 밴드는 밝고 흰 면 사이 검은 띠로 광택.
  * white_gem: 플래그·링을 넓게 — 센터석·pavé에 어두운 facet이 서서 흑백 대비가 난다.
- * 반환 텍스처는 mipmap이 있는 HalfFloat cube — 보석 레이트레이서가 직접 샘플하고,
- * scene.environment로 쓰면 three가 금속용 PMREM을 자동 생성한다.
  */
-export function createStudioEnvCube(renderer: THREE.WebGLRenderer, preset: StudioPreset, resolution = 512) {
+export function buildStudioEnvScene(preset: StudioPreset, whiteGem = WHITE_GEM_PARAMS) {
   const envScene = new THREE.Scene()
 
   // 돔 그라데이션: 고도 floorY 아래는 바닥색, 위로 갈수록 pow(t, power)로 천장색 — 어두운 프리셋은 (-1, 1.5)
@@ -125,18 +145,34 @@ export function createStudioEnvCube(renderer: THREE.WebGLRenderer, preset: Studi
   } else if (preset === 'white_gem') {
     // 보석 전용 — 넓은 검은 영역. 센터석의 어두운 facet은 굵은 검은 영역(특히 고도 45° 상부 링)에서 나오고,
     // 가는 띠만 촘촘히 두르면 오히려 흰 면만 늘어 유리처럼 보였다
-    addLightPanel(new THREE.Vector3(0, 22, 0), 16, 16, 0xffffff, 2.4)
-    for (let i = 0; i < 6; i++) {
-      const angle = (i / 6) * Math.PI * 2 + 0.3
-      addFlag(new THREE.Vector3(Math.cos(angle) * 17, 0, Math.sin(angle) * 17), 5 + (i % 2) * 2, 32)
+    bgMat.uniforms.bottomColor.value.multiplyScalar(whiteGem.floorBrightness)
+    addLightPanel(new THREE.Vector3(0, 22, 0), 16, 16, 0xffffff, 2.4 * whiteGem.panelIntensity)
+    for (let i = 0; i < whiteGem.flagCount; i++) {
+      const angle = (i / whiteGem.flagCount) * Math.PI * 2 + 0.3
+      const width = (whiteGem.flagWidth * (5 + (i % 2) * 2)) / 6
+      addFlag(new THREE.Vector3(Math.cos(angle) * 17, 0, Math.sin(angle) * 17), width, 32)
     }
+    const ringElevation = THREE.MathUtils.degToRad(whiteGem.ringElevation)
+    const ringDistance = 12 * Math.SQRT2
     addLightRing(-1, 19, 0.9, 0x000000, 1)
     addLightRing(6, 17, 1.5, 0x000000, 1)
-    addLightRing(12, 12, 3.2, 0x000000, 1)
+    addLightRing(
+      ringDistance * Math.sin(ringElevation),
+      ringDistance * Math.cos(ringElevation),
+      whiteGem.ringThickness,
+      0x000000,
+      1,
+    )
     addLightRing(19, 7, 1.5, 0x000000, 1)
     for (let i = 0; i < 6; i++) {
       const angle = ((i + 0.5) / 6) * Math.PI * 2 + 0.3
-      addLightPanel(new THREE.Vector3(Math.cos(angle) * 19, 10, Math.sin(angle) * 19), 4, 8, 0xffffff, 2.0)
+      addLightPanel(
+        new THREE.Vector3(Math.cos(angle) * 19, 10, Math.sin(angle) * 19),
+        4,
+        8,
+        0xffffff,
+        2.0 * whiteGem.panelIntensity,
+      )
     }
     for (let i = 0; i < 24; i++) {
       addPinSpot(onSphere((i / 24) * Math.PI * 2 + 0.1, 0.25 + (i % 4) * 0.22, 21), 0.55, 0xffffff, 8.0)
@@ -193,6 +229,20 @@ export function createStudioEnvCube(renderer: THREE.WebGLRenderer, preset: Studi
     addLightRing(-14, 14, 1.0, 0x5588ff, 0.9)
   }
 
+  return envScene
+}
+
+/**
+ * 반환 텍스처는 mipmap이 있는 HalfFloat cube — 보석 레이트레이서가 직접 샘플하고,
+ * scene.environment로 쓰면 three가 금속용 PMREM을 자동 생성한다.
+ */
+export function createStudioEnvCube(
+  renderer: THREE.WebGLRenderer,
+  preset: StudioPreset,
+  resolution = 512,
+  whiteGem?: WhiteGemParams,
+) {
+  const envScene = buildStudioEnvScene(preset, whiteGem)
   const cubeRT = new THREE.WebGLCubeRenderTarget(resolution, {
     type: THREE.HalfFloatType,
     generateMipmaps: true,

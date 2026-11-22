@@ -5,11 +5,19 @@ using JewelViewer;
 internal static partial class Program
 {
     private static readonly Guid TestMaterial = new("00112233-4455-6677-8899-aabbccddeeff");
+    private static readonly Guid TexturedMaterial = new("ffeeddcc-bbaa-9988-7766-554433221100");
+    private static readonly byte[] TestTexture = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3 };
+    private static readonly string TestTextureId = MaterialRules.TextureId(TestTexture);
+    private static readonly UvTransform RhinoRepeatOffset = new(2, 0, -0.2, 0, 3, -0.6);
 
     private static Dictionary<Guid, MaterialDescriptor> TestMaterials() => new()
     {
-        [TestMaterial] = MaterialDescriptor.Create(2, new(0.878, 0.067, 0.373), ior: 1.76, opacity: 0)
+        [TestMaterial] = MaterialDescriptor.Create(2, new(0.878, 0.067, 0.373), ior: 1.76, opacity: 0),
+        [TexturedMaterial] = MaterialDescriptor.Create(1, new(0.2, 0.4, 0.8),
+            colorMap: new(TestTextureId, RhinoRepeatOffset))
     };
+
+    private static Dictionary<string, byte[]> TestTextures() => new() { [TestTextureId] = TestTexture };
 
     private static void MaterialResolution()
     {
@@ -60,6 +68,15 @@ internal static partial class Program
         Check(references.Affected(new HashSet<Guid> { replacement }).SequenceEqual(new[] { top }));
         references.Clear();
         Equal(0, references.Affected(new HashSet<Guid> { replacement }).Length);
+
+        var table = TestMaterials();
+        table[Guid.NewGuid()] = MaterialDescriptor.Create(1, new(1, 1, 1),
+            colorMap: new(MaterialRules.TextureId(new byte[] { 0xFF, 0xD8, 0xFF }), RhinoRepeatOffset));
+        table[Guid.NewGuid()] = table[TexturedMaterial];
+        Equal(0, references.Textures(table).Length);
+        references.Set(top, new[] { TexturedMaterial, TestMaterial });
+        references.Set(other, new[] { TexturedMaterial });
+        Check(references.Textures(table).SequenceEqual(new[] { TestTextureId }), "참조하지 않는 재질의 텍스처를 실음");
     }
 
     private static void MaterialEvents()
@@ -67,6 +84,7 @@ internal static partial class Program
         var general = MaterialDescriptor.Create(1, new(0.2, 0.3, 0.4));
         var changed = MaterialDescriptor.Create(1, new(0.7, 0.3, 0.4));
         var gem = TestMaterials()[TestMaterial];
+        var textured = MaterialDescriptor.Create(1, general.Color, colorMap: new(TestTextureId, RhinoRepeatOffset));
         var cases = new List<(string Name, MaterialDescriptor? Before, MaterialDescriptor? After,
             MaterialEvent Event, bool TopLevel, bool Ignore, MaterialUpdate Expected)>
         {
@@ -75,7 +93,16 @@ internal static partial class Program
             ("값만 변경", general, changed, MaterialEvent.Changed, true, false, MaterialUpdate.Metadata),
             ("kind 변경", general, gem, MaterialEvent.Changed, true, false, MaterialUpdate.Dirty),
             ("재질 해석 복구", null, general, MaterialEvent.Changed, true, false, MaterialUpdate.Dirty),
-            ("재질 해석 실패", general, null, MaterialEvent.Changed, true, false, MaterialUpdate.Dirty)
+            ("재질 해석 실패", general, null, MaterialEvent.Changed, true, false, MaterialUpdate.Dirty),
+            ("텍스처 교체", textured, MaterialDescriptor.Create(1, general.Color,
+                colorMap: new(MaterialRules.TextureId(new byte[] { 0xFF, 0xD8, 0xFF }), RhinoRepeatOffset)),
+                MaterialEvent.Changed, false, false, MaterialUpdate.Metadata),
+            ("텍스처 반복·오프셋 변경", textured, MaterialDescriptor.Create(1, general.Color,
+                colorMap: new(TestTextureId, new(1, 0, 0, 0, 1, 0))), MaterialEvent.Changed, false, false, MaterialUpdate.Metadata),
+            ("같은 텍스처 다시 읽음", textured, MaterialDescriptor.Create(1, general.Color,
+                colorMap: new(MaterialRules.TextureId(TestTexture.ToArray()), RhinoRepeatOffset)),
+                MaterialEvent.Changed, false, false, MaterialUpdate.Ignore),
+            ("텍스처 제거", textured, general, MaterialEvent.Changed, false, false, MaterialUpdate.Metadata)
         };
         foreach (var change in new[] { MaterialEvent.Added, MaterialEvent.Deleted, MaterialEvent.Replaced })
         {
@@ -133,11 +160,31 @@ internal static partial class Program
         Equal(1d, invalid.Opacity);
         Equal(0d, invalid.Clearcoat);
         Equal(0d, invalid.ClearcoatRoughness);
+        Equal<ColorMap?>(null, MaterialDescriptor.Create(1, general.Color,
+            colorMap: new(TestTextureId, RhinoRepeatOffset with { M03 = double.NaN })).ColorMap);
+        Equal("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", MaterialRules.TextureId("abc"u8.ToArray()));
+        foreach (var (name, header, browser) in new (string, byte[], bool)[]
+        {
+            ("PNG", TestTexture, true),
+            ("JPEG", new byte[] { 0xFF, 0xD8, 0xFF, 0xE0 }, true),
+            ("GIF", "GIF89a"u8.ToArray(), true),
+            ("BMP", "BM\0\0"u8.ToArray(), true),
+            ("WebP", "RIFF\0\0\0\0WEBPVP8 "u8.ToArray(), true),
+            ("TIFF", new byte[] { 0x49, 0x49, 0x2A, 0x00 }, false),
+            ("RIFF WAVE", "RIFF\0\0\0\0WAVEfmt "u8.ToArray(), false),
+            ("빈 파일", Array.Empty<byte>(), false)
+        })
+            Check(browser == MaterialRules.BrowserImage(header), "브라우저 이미지 판정: " + name);
         using var json = JsonDocument.Parse(SceneJson.Manifest(1, new(new(0, 0, 0), 1),
-            new("#fff", null, TestMaterials()), Array.Empty<SceneObject>()));
+            new("#fff", null, TestMaterials(), TestTextures()), Array.Empty<SceneObject>()));
         var material = json.RootElement.GetProperty("materials").GetProperty(TestMaterial.ToString("D"));
         Check(material.EnumerateObject().Select(property => property.Name).ToHashSet().SetEquals(new[]
-            { "kind", "color", "metallic", "roughness", "ior", "opacity", "clearcoat", "clearcoatRoughness" }));
+            { "kind", "color", "metallic", "roughness", "ior", "opacity", "clearcoat", "clearcoatRoughness", "colorMap" }));
+        Equal(JsonValueKind.Null, material.GetProperty("colorMap").ValueKind);
+        var colorMap = json.RootElement.GetProperty("materials").GetProperty(TexturedMaterial.ToString("D")).GetProperty("colorMap");
+        Equal(TestTextureId, colorMap.GetProperty("texture").GetString());
+        Check(colorMap.GetProperty("transform").EnumerateArray().Select(value => value.GetDouble())
+            .SequenceEqual(new[] { 2, 0, -0.2, 0, 3, -0.6 }));
         Equal(2, material.GetProperty("kind").GetInt32());
         Check(material.GetProperty("color").EnumerateArray().Select(value => value.GetDouble())
             .SequenceEqual(new[] { 0.878, 0.067, 0.373 }));
@@ -192,12 +239,15 @@ internal static partial class Program
     {
         var payload = Path.Combine(Temp, "material.rvm");
         var manifest = Path.Combine(Temp, "material.json");
-        File.WriteAllBytes(payload, MeshPayload.Write(Small()));
+        var small = Small(smooth: true);
+        File.WriteAllBytes(payload, MeshPayload.Write(small));
         File.WriteAllBytes(manifest, SceneJson.Manifest(1, new(new(0, 0, 0), 1),
-            new("#fff", null, TestMaterials()), Array.Empty<SceneObject>()));
+            new("#fff", null, TestMaterials(), TestTextures()), Array.Empty<SceneObject>()));
         using (var export = File.Create(Path.Combine(Temp, "material.rvs")))
-            SceneExport.WriteRvs(export, new[] { Object() }, new(new(0, 0, 0), 1),
-                new("#fff", null, TestMaterials()));
+            SceneExport.WriteRvs(export,
+                new[] { new SceneObject(Object().Id, 1, MeshPayload.Write(small), MeshPayloadReader.Bounds(small)) },
+                new(new(0, 0, 0), 1),
+                new("#fff", null, TestMaterials(), TestTextures()));
         var start = new ProcessStartInfo("node")
         {
             WorkingDirectory = Root, RedirectStandardOutput = true, RedirectStandardError = true
@@ -210,5 +260,33 @@ internal static partial class Program
         var stderr = process.StandardError.ReadToEndAsync();
         process.WaitForExit();
         Check(process.ExitCode == 0, stdout.Result + stderr.Result);
+    }
+
+    private static void StoneTag()
+    {
+        foreach (var (name, kind, pathTags, smooth) in new (string, byte, string?[], bool)[]
+        {
+            ("태그 없음", 2, new string?[] { null }, false),
+            ("빈 값", 2, new string?[] { "" }, false),
+            ("1", 2, new string?[] { "1" }, true),
+            ("true", 2, new string?[] { "true" }, true),
+            ("yes", 2, new string?[] { "yes" }, true),
+            ("대소문자 무시", 2, new string?[] { "TRUE" }, true),
+            ("앞뒤 공백", 2, new string?[] { " 1 " }, true),
+            ("0", 2, new string?[] { "0" }, false),
+            ("2", 2, new string?[] { "2" }, false),
+            ("참값으로 시작하는 다른 값", 2, new string?[] { "truthy" }, false),
+            ("금속에 태그", 0, new string?[] { "1" }, false),
+            ("일반 재질에 태그", 1, new string?[] { "1" }, false),
+            ("블록 인스턴스에만", 2, new string?[] { "1", null }, true),
+            ("블록 정의 자식에만", 2, new string?[] { null, "1" }, true),
+            ("블록 둘 다", 2, new string?[] { "1", "1" }, true),
+            ("블록 인스턴스 0 + 정의 자식 1", 2, new string?[] { "0", "1" }, true),
+            ("중첩 블록 바깥 인스턴스에만", 2, new string?[] { "1", null, null }, true),
+            ("블록 태그 없음", 2, new string?[] { null, null }, false)
+        })
+        {
+            Check(StoneRules.Smooth(kind, pathTags) == smooth, name);
+        }
     }
 }

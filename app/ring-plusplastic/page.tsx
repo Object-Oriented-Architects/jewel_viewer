@@ -230,6 +230,29 @@ export default function Page() {
       directionalLightIntensity: { value: config.light.directionalLightIntensity ?? 0.3, min: 0, max: 2, step: 0.01 },
     }))
 
+  // white_gem 보석 환경 — 맞춘 값을 config light.whiteGem에 굽는다
+  const whiteGemDefaults = config.light.whiteGem!
+  const { gemFlagCount, gemFlagWidth, gemRingElevation, gemRingThickness, gemFloorBrightness, gemPanelIntensity } =
+    useControls('Gem Env', {
+      gemFlagCount: { value: whiteGemDefaults.flagCount, min: 0, max: 16, step: 1, label: 'flags' },
+      gemFlagWidth: { value: whiteGemDefaults.flagWidth, min: 1, max: 14, step: 0.1, label: 'flag w' },
+      gemRingElevation: { value: whiteGemDefaults.ringElevation, min: 10, max: 80, step: 1, label: 'ring °' },
+      gemRingThickness: { value: whiteGemDefaults.ringThickness, min: 0, max: 8, step: 0.1, label: 'ring w' },
+      gemFloorBrightness: { value: whiteGemDefaults.floorBrightness, min: 0, max: 5, step: 0.01, label: 'floor' },
+      gemPanelIntensity: { value: whiteGemDefaults.panelIntensity, min: 0, max: 3, step: 0.01, label: 'panels' },
+    })
+  const whiteGem = useMemo(
+    () => ({
+      flagCount: gemFlagCount,
+      flagWidth: gemFlagWidth,
+      ringElevation: gemRingElevation,
+      ringThickness: gemRingThickness,
+      floorBrightness: gemFloorBrightness,
+      panelIntensity: gemPanelIntensity,
+    }),
+    [gemFlagCount, gemFlagWidth, gemRingElevation, gemRingThickness, gemFloorBrightness, gemPanelIntensity],
+  )
+
   // 참고 렌더 구도 — OrbitControls는 생성 시점의 camera.up을 궤도 축으로 삼으므로 up을 먼저 바꾸고 key로 다시 만든다
   const [referenceView, setReferenceView] = useState(0)
   const applyReferenceView = useCallback(
@@ -338,6 +361,7 @@ export default function Page() {
               <GemEnvironment
                 source={envSource}
                 gemSource={gemEnvSource}
+                whiteGem={whiteGem}
                 intensity={environmentIntensity}
                 rotation={envRotation}
                 resolution={envResolution}

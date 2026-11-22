@@ -8,6 +8,7 @@ namespace JewelViewer;
 internal sealed class RhinoMaterials
 {
     private readonly Dictionary<Guid, MaterialDescriptor?> _descriptors = new();
+    private readonly Dictionary<string, byte[]> _images = new(StringComparer.Ordinal);
     // 라이브와 내보내기 어댑터가 같은 플러그인 조회 가드를 공유한다.
     private static int _reading;
     public static bool Reading => Volatile.Read(ref _reading) != 0;
@@ -49,7 +50,7 @@ internal sealed class RhinoMaterials
                 var color = pbr.BaseColor;
                 return _descriptors[id] = MaterialDescriptor.Create(kind,
                     new(color.R, color.G, color.B), pbr.Metallic, pbr.Roughness, pbr.OpacityIOR,
-                    pbr.Opacity, pbr.Clearcoat, pbr.ClearcoatRoughness);
+                    pbr.Opacity, pbr.Clearcoat, pbr.ClearcoatRoughness, kind == 1 ? ReadColorMap(doc, render) : null);
             }
             catch (Exception ex)
             {
@@ -62,6 +63,45 @@ internal sealed class RhinoMaterials
         {
             Interlocked.Decrement(ref _reading);
         }
+    }
+
+    private ColorMap? ReadColorMap(RhinoDoc doc, RenderMaterial render)
+    {
+        try
+        {
+            // 절차 텍스처는 Rhino가 생성한 캐시 TIFF 경로를 돌려주므로 이미지 기반 여부로 거른다.
+            if (render.GetTextureFromUsage(RenderMaterial.StandardChildSlots.PbrBaseColor) is not RenderTexture texture ||
+                !render.ChildSlotOn(render.TextureChildSlotName(RenderMaterial.StandardChildSlots.PbrBaseColor)) ||
+                !texture.IsImageBased() || texture.GetProjectionMode() != TextureProjectionMode.MappingChannel ||
+                texture.GetMappingChannel() != 1)
+            {
+                return null;
+            }
+            var path = Utilities.FindFile(doc, texture.Filename, true);
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                return null;
+            var image = File.ReadAllBytes(path);
+            if (!MaterialRules.BrowserImage(image))
+                return null;
+            var textureId = MaterialRules.TextureId(image);
+            _images[textureId] = image;
+            using var simulated = texture.SimulatedTexture(RenderTexture.TextureGeneration.Skip);
+            var xf = simulated.LocalMappingTransform;
+            return new(textureId, new(xf.M00, xf.M01, xf.M03, xf.M10, xf.M11, xf.M13));
+        }
+        catch (Exception ex)
+        {
+            RhinoApp.WriteLine("JewelViewer: 색 텍스처 읽기 실패 — " + ex.Message);
+            return null;
+        }
+    }
+
+    public IReadOnlyDictionary<string, byte[]> Textures(IReadOnlyDictionary<Guid, MaterialDescriptor> table)
+    {
+        var cached = _descriptors.Values.Select(value => value?.ColorMap?.Texture).OfType<string>().ToHashSet();
+        foreach (var key in _images.Keys.Where(key => !cached.Contains(key)).ToArray())
+            _images.Remove(key);
+        return References.Textures(table).ToDictionary(key => key, key => _images[key], StringComparer.Ordinal);
     }
 
     public IReadOnlyDictionary<Guid, MaterialDescriptor> Table(RhinoDoc doc)
@@ -101,6 +141,7 @@ internal sealed class RhinoMaterials
     public void Clear()
     {
         _descriptors.Clear();
+        _images.Clear();
         References.Clear();
     }
 }

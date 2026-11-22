@@ -60,7 +60,8 @@ internal sealed record SceneObject
 }
 
 internal sealed record Presentation(
-    string Background, string? Camera, IReadOnlyDictionary<Guid, MaterialDescriptor> Materials);
+    string Background, string? Camera, IReadOnlyDictionary<Guid, MaterialDescriptor> Materials,
+    IReadOnlyDictionary<string, byte[]> Textures);
 
 internal static class SceneCounters
 {
@@ -88,6 +89,8 @@ internal static class SceneJson
             objects = objects.Select(obj => new { id = obj.Id.ToString("D"), rev = obj.Rev, url = obj.Url })
         });
     }
+
+    public static string TextureUrl(string id) => "/live/tex/" + id;
 
     public static IReadOnlyDictionary<string, MaterialJson> Materials(Presentation presentation) =>
         presentation.Materials.ToDictionary(pair => pair.Key.ToString("D"), pair => pair.Value.Json);

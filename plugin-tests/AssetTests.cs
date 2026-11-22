@@ -166,7 +166,7 @@ internal static partial class Program
             Equal(404, (await Request(server.Port, path)).Status);
         foreach (var path in new[] { "/../index.html", "/%2e%2e/index.html", "/..%5cindex.html", "/a/../../index.html", "/C:/secret", "/assets/file.bin:stream", "/%00" })
             Equal(403, (await Request(server.Port, path)).Status);
-        store.Publish(new[] { obj }, SceneFrame.Calculate(new[] { obj.Box }), new("#fff", null, new Dictionary<Guid, MaterialDescriptor>()));
+        store.Publish(new[] { obj }, SceneFrame.Calculate(new[] { obj.Box }), new("#fff", null, new Dictionary<Guid, MaterialDescriptor>(), new Dictionary<string, byte[]>()));
         var state = await Request(server.Port, "/live/state.json");
         Equal(200, state.Status);
         Check(state.Headers.Contains("Content-Type: application/json; charset=utf-8"));

@@ -332,7 +332,28 @@ public sealed class ViewerPanel : Panel, IPanel
         ScheduleSync();
     }
 
-    private void OnAttributes(object? sender, RhinoModifyObjectAttributesEventArgs e) => Dirty(e.RhinoObject);
+    private void OnAttributes(object? sender, RhinoModifyObjectAttributesEventArgs e)
+    {
+        var obj = e.RhinoObject;
+        if (!obj.IsInstanceDefinitionGeometry)
+        {
+            Dirty(obj);
+            return;
+        }
+        if (!Active(e.Document) ||
+            e.OldAttributes.GetUserString(StoneRules.SmoothKey) == e.NewAttributes.GetUserString(StoneRules.SmoothKey))
+        {
+            return;
+        }
+        // 정의 자식의 둥근 태그는 그 정의를 쓰는 인스턴스의 플래그를 바꾼다.
+        foreach (var definition in e.Document.InstanceDefinitions)
+        {
+            if (!definition.IsDeleted && definition.GetObjectIds().Contains(obj.Id))
+                _changedDefinitions.Add(definition.Id);
+        }
+        _scene?.MetadataDirty();
+        ScheduleSync();
+    }
 
     private void OnBeforeTransform(object? sender, RhinoTransformObjectsEventArgs e)
     {

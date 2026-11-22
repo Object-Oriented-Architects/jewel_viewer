@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json.Serialization;
 
 namespace JewelViewer;
@@ -30,6 +31,15 @@ internal static class MaterialRules
 
     public static byte Kind(Guid type) => type == GemType ? (byte)2 : (byte)1;
 
+    public static string TextureId(byte[] image) => Convert.ToHexString(SHA256.HashData(image)).ToLowerInvariant();
+
+    public static bool BrowserImage(ReadOnlySpan<byte> image) =>
+        image.StartsWith(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }) ||
+        image.StartsWith(new byte[] { 0xFF, 0xD8, 0xFF }) ||
+        image.StartsWith("GIF8"u8) ||
+        image.StartsWith("BM"u8) ||
+        (image.Length >= 12 && image.StartsWith("RIFF"u8) && image[8..12].SequenceEqual("WEBP"u8));
+
     public static bool KindChanged(MaterialDescriptor? before, MaterialDescriptor? after) =>
         (before?.Kind ?? 0) != (after?.Kind ?? 0);
 
@@ -57,12 +67,13 @@ internal sealed record MaterialDescriptor
     public double Opacity { get; private init; }
     public double Clearcoat { get; private init; }
     public double ClearcoatRoughness { get; private init; }
+    public ColorMap? ColorMap { get; private init; }
 
     private MaterialDescriptor() { }
 
     public static MaterialDescriptor Create(
         byte kind, Vec3 color, double metallic = 0, double roughness = 0.5, double ior = 1.5,
-        double opacity = 1, double clearcoat = 0, double clearcoatRoughness = 0)
+        double opacity = 1, double clearcoat = 0, double clearcoatRoughness = 0, ColorMap? colorMap = null)
     {
         static double Unit(double value, double fallback) =>
             double.IsFinite(value) ? Math.Clamp(value, 0, 1) : fallback;
@@ -75,13 +86,23 @@ internal sealed record MaterialDescriptor
             Ior = double.IsFinite(ior) ? Math.Max(1, ior) : 1.5,
             Opacity = Unit(opacity, 1),
             Clearcoat = Unit(clearcoat, 0),
-            ClearcoatRoughness = Unit(clearcoatRoughness, 0)
+            ClearcoatRoughness = Unit(clearcoatRoughness, 0),
+            ColorMap = colorMap?.Transform.Array.All(double.IsFinite) == true ? colorMap : null
         };
     }
 
     public MaterialJson Json => new(
-        Kind, Color.Array, Metallic, Roughness, Ior, Opacity, Clearcoat, ClearcoatRoughness);
+        Kind, Color.Array, Metallic, Roughness, Ior, Opacity, Clearcoat, ClearcoatRoughness,
+        ColorMap == null ? null : new(ColorMap.Texture, ColorMap.Transform.Array));
 }
+
+/// <summary>Rhino UvwTransform의 u·v 행(반복·오프셋·회전)이다. w 성분은 0으로 본다.</summary>
+internal readonly record struct UvTransform(double M00, double M01, double M03, double M10, double M11, double M13)
+{
+    public double[] Array => new[] { M00, M01, M03, M10, M11, M13 };
+}
+
+internal sealed record ColorMap(string Texture, UvTransform Transform);
 
 internal sealed record MaterialJson(
     [property: JsonPropertyName("kind")] byte Kind,
@@ -91,7 +112,12 @@ internal sealed record MaterialJson(
     [property: JsonPropertyName("ior")] double Ior,
     [property: JsonPropertyName("opacity")] double Opacity,
     [property: JsonPropertyName("clearcoat")] double Clearcoat,
-    [property: JsonPropertyName("clearcoatRoughness")] double ClearcoatRoughness);
+    [property: JsonPropertyName("clearcoatRoughness")] double ClearcoatRoughness,
+    [property: JsonPropertyName("colorMap")] ColorMapJson? ColorMap);
+
+internal sealed record ColorMapJson(
+    [property: JsonPropertyName("texture")] string Texture,
+    [property: JsonPropertyName("transform")] double[] Transform);
 
 internal sealed class MaterialReferences
 {
@@ -102,6 +128,13 @@ internal sealed class MaterialReferences
 
     public Guid[] Affected(ISet<Guid> materials) =>
         _objects.Where(pair => pair.Value.Overlaps(materials)).Select(pair => pair.Key).ToArray();
+
+    public string[] Textures(IReadOnlyDictionary<Guid, MaterialDescriptor> table)
+    {
+        var referenced = _objects.Values.SelectMany(materials => materials).ToHashSet();
+        return table.Where(pair => referenced.Contains(pair.Key)).Select(pair => pair.Value.ColorMap?.Texture)
+            .OfType<string>().Distinct(StringComparer.Ordinal).ToArray();
+    }
 
     public void Remove(Guid obj) => _objects.Remove(obj);
     public void Clear() => _objects.Clear();

@@ -16,6 +16,11 @@ export interface ObjectRef {
   rev: number
   url: string
 }
+export type UvTransform = [number, number, number, number, number, number]
+export interface ColorMap {
+  texture: string
+  transform: UvTransform
+}
 export interface MaterialDescriptor {
   kind: 1 | 2
   color: Vec3
@@ -25,6 +30,7 @@ export interface MaterialDescriptor {
   opacity: number
   clearcoat: number
   clearcoatRoughness: number
+  colorMap: ColorMap | null
 }
 export interface Manifest {
   version: number
@@ -38,12 +44,15 @@ export interface Manifest {
 export interface ExportScene {
   manifest: Manifest
   blocks: Map<string, Uint8Array<ArrayBuffer>>
+  textures: Map<string, Uint8Array<ArrayBuffer>>
 }
 const magic = (v: DataView, expected: string) => {
   if (v.byteLength < 8 || String.fromCharCode(...new Uint8Array(v.buffer, v.byteOffset, 4)) !== expected)
     throw new Error(`${expected} 헤더가 올바르지 않습니다`)
 }
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const textureId = /^[0-9a-f]{64}$/
+export const textureUrl = (id: string) => `/live/tex/${id}`
 
 /** C# Guid.ToByteArray의 앞 세 필드는 little-endian이다. */
 export function materialGuid(view: DataView, offset: number) {
@@ -79,7 +88,14 @@ export function validateManifest(m: Manifest) {
         unit,
       ) ||
       !Number.isFinite(material.ior) ||
-      material.ior < 1
+      material.ior < 1 ||
+      (material.colorMap !== null &&
+        (!material.colorMap ||
+          typeof material.colorMap.texture !== 'string' ||
+          !textureId.test(material.colorMap.texture) ||
+          !Array.isArray(material.colorMap.transform) ||
+          material.colorMap.transform.length !== 6 ||
+          !material.colorMap.transform.every(Number.isFinite)))
     )
       throw new Error('장면 재질 값이 올바르지 않습니다')
   }
@@ -110,8 +126,7 @@ export function decodeExport(base64: string): ExportScene {
     start = Math.ceil((8 + length) / 4) * 4
   if (start > buffer.byteLength) throw new Error('RVS1 헤더가 잘렸습니다')
   const header = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + length)))
-  const blocks = new Map<string, Uint8Array<ArrayBuffer>>()
-  const objects = header.objects.map((o: { id: string; offset: number; length: number }) => {
+  const block = (o: { offset: number; length: number }) => {
     if (
       !Number.isSafeInteger(o.offset) ||
       !Number.isSafeInteger(o.length) ||
@@ -119,36 +134,72 @@ export function decodeExport(base64: string): ExportScene {
       o.length < 2 ||
       start + o.offset + o.length > buffer.byteLength
     )
-      throw new Error('RVS1 객체 범위가 올바르지 않습니다')
-    blocks.set(o.id, bytes.subarray(start + o.offset, start + o.offset + o.length))
+      throw new Error('RVS1 블록 범위가 올바르지 않습니다')
+    return bytes.subarray(start + o.offset, start + o.offset + o.length)
+  }
+  const blocks = new Map<string, Uint8Array<ArrayBuffer>>()
+  const objects = header.objects.map((o: { id: string; offset: number; length: number }) => {
+    blocks.set(o.id, block(o))
     return { id: o.id, rev: 0, url: '' }
   })
-  return { manifest: validateManifest({ ...header, version: 1, objects }), blocks }
+  if (!Array.isArray(header.textures)) throw new Error('RVS1 텍스처 목록이 올바르지 않습니다')
+  const textures = new Map<string, Uint8Array<ArrayBuffer>>(
+    header.textures.map((t: { id: string; offset: number; length: number }) => [t.id, block(t)]),
+  )
+  return { manifest: validateManifest({ ...header, version: 1, objects }), blocks, textures }
 }
 
-/** Arrays are aligned, zero-copy views of the decompressed RVM2 buffer. */
+/** Rhino UVs keep v up, so the bitmap is flipped while decoding; ImageBitmap ignores texture.flipY. */
+export async function decodeTexture(bytes: Uint8Array<ArrayBuffer>) {
+  let image = await createImageBitmap(new Blob([bytes]), { imageOrientation: 'flipY', premultiplyAlpha: 'none' })
+  const scale = 2048 / Math.max(image.width, image.height)
+  if (scale < 1) {
+    const full = image
+    try {
+      image = await createImageBitmap(full, {
+        resizeWidth: Math.max(1, Math.round(full.width * scale)),
+        resizeHeight: Math.max(1, Math.round(full.height * scale)),
+        resizeQuality: 'high',
+      })
+    } finally {
+      full.close()
+    }
+  }
+  const texture = new THREE.Texture(image)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+  texture.flipY = false
+  texture.matrixAutoUpdate = false
+  texture.needsUpdate = true
+  return texture
+}
+
+/** Arrays are aligned, zero-copy views of the decompressed RVM3 buffer. flags bit0 = UV, bit1 = 둥근 스톤(정점 법선 보간). */
 export async function decodeObject(compressed: Uint8Array<ArrayBuffer>) {
   const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'))
   const buffer = await new Response(stream).arrayBuffer()
   const view = new DataView(buffer)
-  magic(view, 'RVM2')
-  if (buffer.byteLength < 32) throw new Error('RVM2 기준점이 잘렸습니다')
+  magic(view, 'RVM3')
+  if (buffer.byteLength < 32) throw new Error('RVM3 기준점이 잘렸습니다')
   const origin = new THREE.Vector3(view.getFloat64(8, true), view.getFloat64(16, true), view.getFloat64(24, true))
-  if (!origin.toArray().every(Number.isFinite)) throw new Error('RVM2 기준점이 올바르지 않습니다')
+  if (!origin.toArray().every(Number.isFinite)) throw new Error('RVM3 기준점이 올바르지 않습니다')
   const count = view.getUint32(4, true)
   let at = 32
-  const parts: { kind: number; materialId: string; geometry: THREE.BufferGeometry }[] = []
+  const parts: { kind: number; materialId: string; smooth: boolean; geometry: THREE.BufferGeometry }[] = []
   try {
     for (let i = 0; i < count; i++) {
-      if (at + 28 > buffer.byteLength) throw new Error('RVM2 파트가 잘렸습니다')
+      if (at + 28 > buffer.byteLength) throw new Error('RVM3 파트가 잘렸습니다')
       const kind = view.getUint8(at),
+        flags = view.getUint8(at + 1),
         materialId = materialGuid(view, at + 4),
         vertices = view.getUint32(at + 20, true),
         indices = view.getUint32(at + 24, true)
-      const end = at + 28 + vertices * 24 + indices * 4
+      const uvAt = at + 28 + vertices * 24,
+        indexAt = uvAt + (flags & 1 ? vertices * 8 : 0),
+        end = indexAt + indices * 4
       if (
         kind > 2 ||
-        view.getUint8(at + 1) ||
+        flags > 3 ||
         view.getUint8(at + 2) ||
         view.getUint8(at + 3) ||
         vertices === 0 ||
@@ -156,22 +207,29 @@ export async function decodeObject(compressed: Uint8Array<ArrayBuffer>) {
         indices % 3 ||
         end > buffer.byteLength
       )
-        throw new Error('RVM2 파트가 올바르지 않습니다')
+        throw new Error('RVM3 파트가 올바르지 않습니다')
       const positions = new Float32Array(buffer, at + 28, vertices * 3)
       const normals = new Float32Array(buffer, at + 28 + vertices * 12, vertices * 3)
-      const index = new Uint32Array(buffer, at + 28 + vertices * 24, indices)
-      if (!positions.every(Number.isFinite) || !normals.every(Number.isFinite) || index.some((n) => n >= vertices))
-        throw new Error('RVM2 메시 데이터가 올바르지 않습니다')
+      const uvs = flags & 1 ? new Float32Array(buffer, uvAt, vertices * 2) : null
+      const index = new Uint32Array(buffer, indexAt, indices)
+      if (
+        !positions.every(Number.isFinite) ||
+        !normals.every(Number.isFinite) ||
+        (uvs && !uvs.every(Number.isFinite)) ||
+        index.some((n) => n >= vertices)
+      )
+        throw new Error('RVM3 메시 데이터가 올바르지 않습니다')
       const geometry = new THREE.BufferGeometry()
-      parts.push({ kind, materialId, geometry })
+      parts.push({ kind, materialId, smooth: (flags & 2) !== 0, geometry })
       geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
       geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
+      if (uvs) geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
       geometry.setIndex(new THREE.BufferAttribute(index, 1))
       if (!normals.some((n) => n !== 0)) geometry.computeVertexNormals()
       geometry.computeBoundingBox()
       at = end
     }
-    if (!parts.length || at !== buffer.byteLength) throw new Error('RVM2 길이 또는 파트 수가 올바르지 않습니다')
+    if (!parts.length || at !== buffer.byteLength) throw new Error('RVM3 길이 또는 파트 수가 올바르지 않습니다')
     return { origin, parts }
   } catch (error) {
     parts.forEach((p) => p.geometry.dispose())

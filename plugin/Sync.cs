@@ -113,7 +113,8 @@ internal sealed class RhinoSceneDocument : ISceneDocument, IDisposable
         var background = doc == null ? "#ffffff" : SceneSync.ToHex(doc.RenderSettings.BackgroundColorTop);
         var center = new Point3d(frame.Center.X, frame.Center.Y, frame.Center.Z);
         var camera = doc == null || !_cameraEnabled() ? null : SceneSync.CreateCameraJson(doc, center, frame.Scale);
-        return new(background, camera, doc == null ? new Dictionary<Guid, MaterialDescriptor>() : Materials.Table(doc));
+        var materials = doc == null ? new Dictionary<Guid, MaterialDescriptor>() : Materials.Table(doc);
+        return new(background, camera, materials, Materials.Textures(materials));
     }
 
     public void Invalidate(Guid? id = null)
@@ -143,7 +144,7 @@ internal sealed class RhinoSceneDocument : ISceneDocument, IDisposable
         try
         {
             using var parameters = doc.GetMeshingParameters(doc.MeshingParameterStyle);
-            Visit(doc, obj, Transform.Identity, null, new(), null, parameters, leaves, references);
+            Visit(doc, obj, Transform.Identity, null, Array.Empty<string?>(), new(), null, parameters, leaves, references);
             Materials.References.Set(id, references);
             return new RhinoSnapshot(leaves);
         }
@@ -156,13 +157,14 @@ internal sealed class RhinoSceneDocument : ISceneDocument, IDisposable
     }
 
     private void Visit(
-        RhinoDoc doc, RhinoObject leaf, Transform transform, Guid? parentMaterial,
+        RhinoDoc doc, RhinoObject leaf, Transform transform, Guid? parentMaterial, string?[] parentTags,
         HashSet<Guid> stack, Guid? owner, MeshingParameters parameters,
         List<LeafInstance> leaves, HashSet<Guid> references)
     {
         if (!Visible(doc, leaf, false))
             return;
         var materialId = Materials.Resolve(doc, leaf.Attributes, parentMaterial);
+        var pathTags = parentTags.Append(leaf.Attributes.GetUserString(StoneRules.SmoothKey)).ToArray();
         if (leaf is InstanceObject instance)
         {
             var definition = instance.InstanceDefinition;
@@ -172,7 +174,7 @@ internal sealed class RhinoSceneDocument : ISceneDocument, IDisposable
             {
                 foreach (var child in definition.GetObjects() ?? Array.Empty<RhinoObject>())
                 {
-                    Visit(doc, child, transform * instance.InstanceXform, materialId,
+                    Visit(doc, child, transform * instance.InstanceXform, materialId, pathTags,
                         stack, definition.Id, parameters, leaves, references);
                 }
             }
@@ -205,7 +207,7 @@ internal sealed class RhinoSceneDocument : ISceneDocument, IDisposable
             if (source == null)
                 return;
         }
-        leaves.Add(new(source, transform, kind, kind == 0 ? Guid.Empty : materialId));
+        leaves.Add(new(source, transform, kind, kind == 0 ? Guid.Empty : materialId, StoneRules.Smooth(kind, pathTags)));
     }
 
     private static bool Visible(RhinoDoc doc, RhinoObject obj, bool top)
@@ -282,7 +284,7 @@ internal sealed class RhinoSceneDocument : ISceneDocument, IDisposable
         Materials.Clear();
     }
 
-    private sealed record LeafInstance(LeafSource Source, Transform Transform, byte Kind, Guid MaterialId);
+    private sealed record LeafInstance(LeafSource Source, Transform Transform, byte Kind, Guid MaterialId, bool Smooth);
     private sealed record CachedSource(Guid Definition, LeafSource Source);
 
     /// <summary>
@@ -452,7 +454,7 @@ internal sealed class RhinoSceneDocument : ISceneDocument, IDisposable
 
         public BuiltObject? Build()
         {
-            var meshes = new List<(Mesh Mesh, byte Kind, Guid MaterialId)>();
+            var meshes = new List<(Mesh Mesh, byte Kind, Guid MaterialId, bool Smooth)>();
             try
             {
                 var bounds = BoundingBox.Unset;
@@ -466,7 +468,7 @@ internal sealed class RhinoSceneDocument : ISceneDocument, IDisposable
                         mesh.Dispose();
                         continue;
                     }
-                    meshes.Add((mesh, leaf.Kind, leaf.MaterialId));
+                    meshes.Add((mesh, leaf.Kind, leaf.MaterialId, leaf.Smooth));
                     bounds.Union(mesh.GetBoundingBox(true));
                 }
                 if (meshes.Count == 0 || !bounds.IsValid)
@@ -474,7 +476,8 @@ internal sealed class RhinoSceneDocument : ISceneDocument, IDisposable
 
                 var origin = bounds.Center;
                 // 보석은 리프당 한 part를 유지한다. 맞닿은 별개 스톤을 하나로 합치면 안 된다.
-                var parts = meshes.Select(item => CreatePart(item.Mesh, item.Kind, item.MaterialId, origin)).ToArray();
+                var parts = meshes.Select(item =>
+                    CreatePart(item.Mesh, item.Kind, item.MaterialId, item.Smooth, origin)).ToArray();
                 return new(MeshPayload.Write(new(new(origin.X, origin.Y, origin.Z), parts)),
                     new(new(bounds.Min.X, bounds.Min.Y, bounds.Min.Z), new(bounds.Max.X, bounds.Max.Y, bounds.Max.Z)));
             }
@@ -485,7 +488,7 @@ internal sealed class RhinoSceneDocument : ISceneDocument, IDisposable
             }
         }
 
-        private static MeshPart CreatePart(Mesh mesh, byte kind, Guid materialId, Point3d origin)
+        private static MeshPart CreatePart(Mesh mesh, byte kind, Guid materialId, bool smooth, Point3d origin)
         {
             var positions = new float[mesh.Vertices.Count * 3];
             var normals = new float[positions.Length];
@@ -515,6 +518,21 @@ internal sealed class RhinoSceneDocument : ISceneDocument, IDisposable
             if (!completeNormals)
                 Array.Clear(normals);
 
+            // 텍스처는 일반 재질에만 붙는다. kind가 바뀌면 메시를 다시 만들므로 UV도 그때 따라온다.
+            float[]? uvs = null;
+            if (kind == 1 && mesh.TextureCoordinates.Count == mesh.Vertices.Count)
+            {
+                uvs = new float[mesh.Vertices.Count * 2];
+                for (int index = 0; index < mesh.Vertices.Count; index++)
+                {
+                    var uv = mesh.TextureCoordinates[index];
+                    uvs[index * 2] = uv.X;
+                    uvs[index * 2 + 1] = uv.Y;
+                }
+                if (!uvs.All(float.IsFinite))
+                    uvs = null;
+            }
+
             foreach (var face in mesh.Faces)
             {
                 indices.Add((uint)face.A);
@@ -527,7 +545,7 @@ internal sealed class RhinoSceneDocument : ISceneDocument, IDisposable
                     indices.Add((uint)face.D);
                 }
             }
-            return new(kind, materialId, positions, normals, indices.ToArray());
+            return new(kind, materialId, positions, normals, uvs, indices.ToArray(), smooth);
         }
 
         public void Dispose()

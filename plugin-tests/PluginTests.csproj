@@ -18,6 +18,7 @@
     <Compile Include="../plugin/SceneExport.cs" Link="SceneExport.cs" />
     <Compile Include="../plugin/DependencyRules.cs" Link="DependencyRules.cs" />
     <Compile Include="../plugin/MaterialRules.cs" Link="MaterialRules.cs" />
+    <Compile Include="../plugin/StoneRules.cs" Link="StoneRules.cs" />
     <Compile Include="../plugin/IncrementalScene.cs" Link="IncrementalScene.cs" />
     <Compile Include="../plugin/PullSignal.cs" Link="PullSignal.cs" />
   </ItemGroup>

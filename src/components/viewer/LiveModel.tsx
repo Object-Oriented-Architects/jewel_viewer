@@ -1,8 +1,9 @@
 'use client'
 
-import { useLayoutEffect } from 'react'
+import { useLayoutEffect, useSyncExternalStore } from 'react'
 import * as THREE from 'three'
 import { ringPlusplasticConfig as config } from '@/config'
+import { ContactFloorShadow } from '../canvas/ContactFloorShadow'
 import { DiamondMaterial } from '../canvas/gem/DiamondMaterial'
 import { splitFacetedStones } from '../canvas/gem/gemGeometry'
 import { useGemEnv, type GemEnv } from '../canvas/gem/GemEnvironment'
@@ -19,7 +20,16 @@ import {
   gemMaterialOptions,
   connectedGemOptions,
 } from '../canvas/jewelryMaterials'
-import { decodeObject, validateManifest, type Manifest, type ObjectRef, type ExportScene } from './sceneProtocol'
+import {
+  decodeObject,
+  decodeTexture,
+  textureUrl,
+  validateManifest,
+  type ColorMap,
+  type Manifest,
+  type ObjectRef,
+  type ExportScene,
+} from './sceneProtocol'
 
 type Stone = {
   mesh: THREE.Mesh<THREE.BufferGeometry, DiamondMaterial>
@@ -39,6 +49,12 @@ type Entry = {
   box: THREE.Box3
 }
 type Failure = { count: number; next: number }
+type TextureImage = { texture: THREE.Texture | null; controller: AbortController }
+
+function releaseTexture(texture: THREE.Texture) {
+  texture.dispose()
+  ;(texture.image as ImageBitmap).close()
+}
 
 /** Imperative ownership keeps unchanged materials and the Canvas mounted across pulls. */
 export class LiveScene {
@@ -48,8 +64,12 @@ export class LiveScene {
   box: THREE.Box3 | null = null
   radius = 1.5
   manifest: Manifest | null = null
+  /** Replaced only when visible shapes, bounds, materials or textures change, never on a same-content re-pull. */
+  appearance: { revision: number; box: THREE.Box3 | null } = { revision: 0, box: null }
   onChange: () => void = () => {}
   on404: () => void = () => {}
+  private appearanceListeners = new Set<() => void>()
+  private appearanceDirty = false
   private metal = createMetalMaterial(config.metal ?? {})
   private materials = new Map<string, THREE.MeshPhysicalMaterial>()
   private options = gemMaterialOptions(gemControlDefaults(config.diamond), config.diamond?.neutralSpectrum)
@@ -58,6 +78,8 @@ export class LiveScene {
   private pending = new Map<string, AbortController>()
   private failures = new Map<string, Failure>()
   private blocks: ExportScene['blocks'] | undefined
+  private textures: ExportScene['textures'] | undefined
+  private images = new Map<string, TextureImage>()
   // Reconcile alone rebuilds the queue. Completions advance a cursor, not desired.
   private queue: ObjectRef[] = []
   private cursor = 0
@@ -75,9 +97,23 @@ export class LiveScene {
   private currentBake: { stone: Stone; bake: ReturnType<typeof settingBake> } | null = null
   private blocked: (ray: THREE.Ray) => boolean = () => false
 
+  readonly onAppearance = (listener: () => void) => {
+    this.appearanceListeners.add(listener)
+    return () => {
+      this.appearanceListeners.delete(listener)
+    }
+  }
+
+  private appearanceChanged() {
+    this.appearance = { revision: this.appearance.revision + 1, box: this.box }
+    for (const listener of this.appearanceListeners) listener()
+  }
+
   setEnvironment(env: GemEnv | null) {
+    const stonesToggle = !env !== !this.env
     this.env = env
     for (const entry of this.entries.values()) for (const stone of entry.stones) this.updateStone(stone)
+    if (stonesToggle) this.appearanceChanged()
   }
 
   private updateStone(stone: Stone) {
@@ -111,7 +147,14 @@ export class LiveScene {
     }
     const transmission = 1 - value.opacity
     const changedTransmission = material.transmission > 0 !== transmission > 0
-    material.color.setRGB(...value.color, THREE.SRGBColorSpace)
+    const map = value.colorMap ? this.colorMap(material, value.colorMap) : null
+    if (material.map !== map) {
+      if (!material.map !== !map) material.needsUpdate = true
+      material.map?.dispose()
+      material.map = map
+    }
+    if (map) material.color.set(0xffffff)
+    else material.color.setRGB(...value.color, THREE.SRGBColorSpace)
     material.metalness = value.metallic
     material.roughness = value.roughness
     material.clearcoat = value.clearcoat
@@ -120,6 +163,59 @@ export class LiveScene {
     material.ior = transmission > 0 ? value.ior : 1.5
     if (changedTransmission) material.needsUpdate = true
     return material
+  }
+
+  private colorMap(material: THREE.MeshPhysicalMaterial, value: ColorMap) {
+    const image = this.image(value.texture).texture
+    if (!image) return null
+    const map = material.map?.source === image.source ? material.map : image.clone()
+    const [a, b, c, d, e, f] = value.transform
+    map.matrix.set(a, b, c, d, e, f, 0, 0, 1)
+    return map
+  }
+
+  private image(id: string) {
+    let image = this.images.get(id)
+    if (!image) {
+      image = { texture: null, controller: new AbortController() }
+      this.images.set(id, image)
+      void this.loadImage(id, image)
+    }
+    return image
+  }
+
+  private async loadImage(id: string, image: TextureImage) {
+    try {
+      let bytes = this.textures?.get(id)
+      if (!bytes) {
+        const response = await fetch(textureUrl(id), { cache: 'no-store', signal: image.controller.signal })
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        bytes = new Uint8Array(await response.arrayBuffer())
+      }
+      const texture = await decodeTexture(bytes)
+      if (this.stopped || this.images.get(id) !== image) {
+        releaseTexture(texture)
+        return
+      }
+      image.texture = texture
+      this.appearanceDirty = true
+      this.scheduleFlush()
+    } catch (cause) {
+      if (this.stopped || this.images.get(id) !== image) return
+      // The color stays visible; the next material refresh asks for the image again.
+      this.images.delete(id)
+      this.report(`texture ${id}: ${cause instanceof Error ? cause.message : String(cause)}`)
+    }
+  }
+
+  private report(message: string) {
+    this.errors.push(message)
+    this.errors.splice(0, Math.max(0, this.errors.length - 100))
+    const w = window as unknown as { __RHINOVIEW_ERRORS?: string[] }
+    if (w.__RHINOVIEW_ERRORS) {
+      w.__RHINOVIEW_ERRORS.push(message)
+      w.__RHINOVIEW_ERRORS.splice(0, Math.max(0, w.__RHINOVIEW_ERRORS.length - 100))
+    }
   }
 
   private refreshMaterials() {
@@ -133,17 +229,34 @@ export class LiveScene {
     }
     for (const [id, material] of this.materials) {
       if (!used.has(id) || !this.manifest?.materials[id]) {
+        material.map?.dispose()
         material.dispose()
         this.materials.delete(id)
       }
     }
+    const textures = new Set([...this.materials.keys()].map((id) => this.manifest?.materials[id]?.colorMap?.texture))
+    for (const [id, image] of this.images) {
+      if (!textures.has(id)) {
+        image.controller.abort()
+        if (image.texture) releaseTexture(image.texture)
+        this.images.delete(id)
+      }
+    }
   }
 
-  reconcile(manifest: Manifest, blocks?: ExportScene['blocks']) {
+  reconcile(manifest: Manifest, blocks?: ExportScene['blocks'], textures?: ExportScene['textures']) {
     validateManifest(manifest)
     if (this.stopped || (this.manifest && manifest.version < this.manifest.version)) return
+    if (
+      !this.manifest ||
+      this.manifest.scale !== manifest.scale ||
+      this.manifest.center.some((value, axis) => value !== manifest.center[axis]) ||
+      JSON.stringify(this.manifest.materials) !== JSON.stringify(manifest.materials)
+    )
+      this.appearanceDirty = true
     this.manifest = manifest
     this.blocks = blocks
+    this.textures = textures
     this.desired = new Map(manifest.objects.map((o) => [o.id, o]))
     const desiredKeys = new Set(manifest.objects.map((o) => `${o.id}:${o.rev}`))
     for (const key of this.failures.keys()) if (!desiredKeys.has(key)) this.failures.delete(key)
@@ -274,7 +387,7 @@ export class LiveScene {
         for (const part of decoded.parts) {
           entry.box.union(part.geometry.boundingBox!.clone().translate(entry.origin))
           if (part.kind === 2) {
-            for (const geometry of splitFacetedStones(part.geometry)) {
+            for (const geometry of splitFacetedStones(part.geometry, part.smooth)) {
               const mesh = new THREE.Mesh(geometry, new DiamondMaterial(geometry))
               mesh.userData = { isGem: true, pave: false }
               const placed = {
@@ -323,6 +436,7 @@ export class LiveScene {
       this.entries.set(ref.id, entry)
       this.place(entry)
       this.root.add(entry.group)
+      this.appearanceDirty = true
       if (entry.occluders.length) this.metalDirty = true
       if (entry.stones.length) this.gemDirty = true
       for (const stone of entry.stones) this.newStones.add(stone)
@@ -330,14 +444,7 @@ export class LiveScene {
       this.scheduleFlush()
     } catch (cause) {
       if (!this.stopped && !controller.signal.aborted && this.desired.get(ref.id)?.rev === ref.rev) {
-        const message = `${ref.id}@${ref.rev}: ${cause instanceof Error ? cause.message : String(cause)}`
-        this.errors.push(message)
-        this.errors.splice(0, Math.max(0, this.errors.length - 100))
-        const w = window as unknown as { __RHINOVIEW_ERRORS?: string[] }
-        if (w.__RHINOVIEW_ERRORS) {
-          w.__RHINOVIEW_ERRORS.push(message)
-          w.__RHINOVIEW_ERRORS.splice(0, Math.max(0, w.__RHINOVIEW_ERRORS.length - 100))
-        }
+        this.report(`${ref.id}@${ref.rev}: ${cause instanceof Error ? cause.message : String(cause)}`)
         const count = (this.failures.get(key)?.count ?? 0) + 1
         this.failures.set(key, { count, next: performance.now() + Math.min(5000, 250 * 2 ** Math.min(count - 1, 5)) })
         // Failed replacements never enter the screen set. Keep the old mesh and bounds;
@@ -361,6 +468,7 @@ export class LiveScene {
   private remove(entry: Entry) {
     this.root.remove(entry.group)
     this.entries.delete(entry.id)
+    this.appearanceDirty = true
     if (entry.occluders.length) this.metalDirty = true
     if (entry.stones.length) this.gemDirty = true
     this.disposeEntry(entry)
@@ -413,6 +521,10 @@ export class LiveScene {
           this.metalDirty = this.gemDirty = false
           if (config.diamond?.settingOcclusion) this.scheduleBake()
         }
+        if (this.appearanceDirty) {
+          this.appearanceDirty = false
+          this.appearanceChanged()
+        }
         this.onChange()
       })
   }
@@ -451,13 +563,22 @@ export class LiveScene {
     this.newStones.clear()
     this.blocked = () => false
     this.blocks = undefined
+    this.textures = undefined
     this.failures.clear()
     this.retries.clear()
     this.queue = []
     this.root.clear()
     this.metal.dispose()
-    for (const material of this.materials.values()) material.dispose()
+    for (const material of this.materials.values()) {
+      material.map?.dispose()
+      material.dispose()
+    }
     this.materials.clear()
+    for (const image of this.images.values()) {
+      image.controller.abort()
+      if (image.texture) releaseTexture(image.texture)
+    }
+    this.images.clear()
   }
 }
 
@@ -467,4 +588,10 @@ export function LiveModel({ scene }: { scene: LiveScene }) {
     scene.setEnvironment(env)
   }, [scene, env])
   return <primitive object={scene.root} dispose={null} />
+}
+
+export function LiveFloorShadow({ scene }: { scene: LiveScene }) {
+  const appearance = useSyncExternalStore(scene.onAppearance, () => scene.appearance)
+  if (!config.floorShadow) return null
+  return <ContactFloorShadow box={appearance.box} revision={appearance.revision} settings={config.floorShadow} />
 }

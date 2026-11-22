@@ -68,6 +68,15 @@ export const ringPlusplasticConfig: SceneConfig = {
     // 참고 렌더 대조 시 강도는 0.8이었고, 지금 기본값은 운영 패널에서 쓰는 0.7이다
     // 절차적 스튜디오(white_metal·white_gem, ijewel3d 룩)는 Leva 환경맵 목록에서 선택 가능
     gemStudioPreset: 'white_gem',
+    // 보석에 비치는 흑백 비율 — 운영 패널 Gem Env에서 맞춘 값을 굽는다
+    whiteGem: {
+      flagCount: 6,
+      flagWidth: 6,
+      ringElevation: 45,
+      ringThickness: 3.2,
+      floorBrightness: 1,
+      panelIntensity: 1,
+    },
     environmentIntensity: 0.7,
     envRotX: 0,
     envRotY,
@@ -150,14 +159,14 @@ export const ringPlusplasticConfig: SceneConfig = {
     rotationX: -90,
   },
 
-  // 참고 렌더엔 빛 번짐이 없다 — 켜면 pavé 둘레가 뿌옇게 번졌다 (참고 렌더 대조 시엔 threshold 2.4로 꺼 두는 게 맞다).
-  // 지금 기본값은 운영 패널에서 쓰는 켜짐 + 낮은 threshold(0.57) — 참고 렌더보다 번짐이 강하다
+  // 참고 렌더엔 빛 번짐이 없다 (참고 렌더 대조 시엔 끌 것). 기본값은 아이주얼 대조 피드백으로 센터석 하이라이트 번짐을 0.21/0.57/0.4의 1.9배로 올렸다.
+  // threshold 0.57은 금속까지 번져 세기만 올리면 반지 전체가 뿌옇게 떴다(0.6/0.6에서 pavé 윤곽 −25%) — 2.0이면 하이라이트만 번진다(pavé 윤곽 −11%, 0.21/0.57은 −9%)
   bloom: {
     enabled: true,
-    intensity: 0.21,
-    luminanceThreshold: 0.57,
+    intensity: 1.5,
+    luminanceThreshold: 2.0,
     luminanceSmoothing: 0.39,
-    radius: 0.4,
+    radius: 0.7,
     levels: 5,
   },
 
@@ -171,16 +180,18 @@ export const ringPlusplasticConfig: SceneConfig = {
     lightSource: [5, 5, -10],
   },
 
-  shadows: {
-    frames: 100,
-    color: '#000000',
-    colorBlend: 2,
-    alphaTest: 0.7,
-    opacity: 1,
-    scale: 12,
-    lightAmount: 8,
-    lightRadius: 10,
-    lightAmbient: 0.5,
-    lightBias: 0.001,
+  // 샘플 모드 구운 그림자(밴드 아래 접지)와 눈으로 맞춘 값 — far 1은 밴드 옆면까지 넓게 번졌다.
+  // 재굽기는 색 패스 포함 3.1~6.4ms(RTX 5070 Ti, 13만 삼각형, finish 동기화 포함)라 디바운스는 한 번의 갱신에 겹친 로드를 묶는 용도 —
+  // 두 객체 동시 갱신의 신호 간격이 최대 92ms였다
+  floorShadow: {
+    opacity: 0.85,
+    scale: 4,
+    far: 0.5,
+    blur: 3,
+    // 로즈골드 밴드 아래 그림자의 R−B 상위 5%가 10레벨을 넘는 최소값(0.025~0.15 비교) — 로즈 14·옐로 19·흰 금속(#f2f5f8) 2,
+    // 그림자 깊이는 95% 남는다. 아이주얼 스크린샷은 밴드 옆 바닥 R−B 10~25
+    colorBleed: 0.025,
+    resolution: 512,
+    debounceMs: 150,
   },
 }

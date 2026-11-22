@@ -11,9 +11,9 @@ internal static class MeshPayloadReader
         using var input = new MemoryStream(payload, false);
         using var zip = new GZipStream(input, CompressionMode.Decompress);
         using var reader = new BinaryReader(zip);
-        if (Encoding.ASCII.GetString(reader.ReadBytes(4)) != "RVM2")
+        if (Encoding.ASCII.GetString(reader.ReadBytes(4)) != "RVM3")
         {
-            throw new InvalidDataException("RVM2 매직이 올바르지 않습니다.");
+            throw new InvalidDataException("RVM3 매직이 올바르지 않습니다.");
         }
 
         var count = reader.ReadUInt32();
@@ -22,18 +22,20 @@ internal static class MeshPayloadReader
         for (uint part = 0; part < count; part++)
         {
             var kind = reader.ReadByte();
-            var reserved = reader.ReadBytes(3);
+            var flags = reader.ReadByte();
+            var reserved = reader.ReadBytes(2);
             var materialId = new Guid(reader.ReadBytes(16));
             var vertexCount = checked((int)reader.ReadUInt32());
             var indexCount = checked((int)reader.ReadUInt32());
-            if (kind > 2 || reserved.Length != 3 || reserved.Any(value => value != 0) ||
+            if (kind > 2 || flags > 3 || reserved.Length != 2 || reserved.Any(value => value != 0) ||
                 vertexCount <= 0 || indexCount % 3 != 0)
             {
-                throw new InvalidDataException("RVM2 파트 헤더가 올바르지 않습니다.");
+                throw new InvalidDataException("RVM3 파트 헤더가 올바르지 않습니다.");
             }
 
             var positions = new float[checked(vertexCount * 3)];
             var normals = new float[positions.Length];
+            var uvs = (flags & 1) != 0 ? new float[checked(vertexCount * 2)] : null;
             var indices = new uint[indexCount];
             for (int index = 0; index < positions.Length; index++)
             {
@@ -43,19 +45,23 @@ internal static class MeshPayloadReader
             {
                 normals[index] = reader.ReadSingle();
             }
+            for (int index = 0; index < (uvs?.Length ?? 0); index++)
+            {
+                uvs![index] = reader.ReadSingle();
+            }
             for (int index = 0; index < indices.Length; index++)
             {
                 indices[index] = reader.ReadUInt32();
                 if (indices[index] >= vertexCount)
                 {
-                    throw new InvalidDataException("RVM2 인덱스가 정점 범위를 벗어났습니다.");
+                    throw new InvalidDataException("RVM3 인덱스가 정점 범위를 벗어났습니다.");
                 }
             }
-            parts.Add(new(kind, materialId, positions, normals, indices));
+            parts.Add(new(kind, materialId, positions, normals, uvs, indices, (flags & 2) != 0));
         }
         if (reader.BaseStream.ReadByte() != -1)
         {
-            throw new InvalidDataException("RVM2 뒤에 불필요한 바이트가 있습니다.");
+            throw new InvalidDataException("RVM3 뒤에 불필요한 바이트가 있습니다.");
         }
         return new(origin, parts);
     }

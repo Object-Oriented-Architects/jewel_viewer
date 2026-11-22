@@ -213,7 +213,7 @@ internal sealed class IncrementalScene
                     continue;
                 }
 
-                // .NET gzip 출력은 같은 RVM2 입력에 결정적이다(헤더 시각 없음).
+                // .NET gzip 출력은 같은 RVM3 입력에 결정적이다(헤더 시각 없음).
                 // kind·origin·인덱스를 포함한 전체 바이트가 같을 때만 rev와 기존 페이로드를 재사용한다.
                 if (_cache.TryGetValue(result.Id, out var previous) &&
                     previous.Payload.AsSpan().SequenceEqual(built.Payload))

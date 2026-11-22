@@ -1,6 +1,6 @@
 // 페이지별 Leva 설정 타입 정의
 
-import type { StudioPreset } from '@/components/canvas/gem/studioEnv'
+import type { StudioPreset, WhiteGemParams } from '@/components/canvas/gem/studioEnv'
 import type { DispersionMode } from '@/components/canvas/gem/DiamondMaterial'
 import type { CUSTOM_PRESET, GemPresetKey, MetalPresetKey } from '@/components/canvas/gem/presets'
 
@@ -25,6 +25,8 @@ export interface LightConfig {
   studioPreset?: StudioPreset
   /** 보석 레이트레이서 전용 환경 (없으면 studioPreset/hdr과 같음) — 흰 배경 금속 환경에서 보석 반짝임을 살릴 때 */
   gemStudioPreset?: StudioPreset
+  /** white_gem 스튜디오의 검은 플래그·링, 바닥, 밝은 패널 조절값 (없으면 white_gem 원래 값) */
+  whiteGem?: WhiteGemParams
   environmentIntensity: number
   envRotX: number
   envRotY: number
@@ -143,17 +145,20 @@ export interface CausticsConfig {
   lightSource: [number, number, number]
 }
 
-export interface ShadowsConfig {
-  frames: number
-  color: string
-  colorBlend: number
-  alphaTest: number
+/** 라이브·내보내기 뷰어의 접지 그림자 — 모델 아래 직교 깊이 렌더를 흐려 바닥에 굽는다 */
+export interface FloorShadowConfig {
   opacity: number
+  /** 바닥 한 변 = 모델 반경 × scale */
   scale: number
-  lightAmount: number
-  lightRadius: number
-  lightAmbient: number
-  lightBias: number
+  /** 이 높이(모델 반경 × far)에서 그림자가 0이 된다 */
+  far: number
+  /** 블러 탭 간격 = 바닥 한 변 × blur / 256 (drei ContactShadows와 같은 단위) */
+  blur: number
+  /** 컬러 브리딩 세기 (0 = 끔) — 바닥에서 올려다본 모델 색을 그림자와 같은 높이 감쇠·블러로 바닥에 더한다 */
+  colorBleed: number
+  resolution: number
+  /** 형상·재질이 바뀐 뒤 다시 굽기까지 기다리는 시간 */
+  debounceMs: number
 }
 
 /**
@@ -194,5 +199,5 @@ export interface SceneConfig {
   grade?: GradeConfig
   ao?: AOConfig
   caustics?: CausticsConfig
-  shadows?: ShadowsConfig
+  floorShadow?: FloorShadowConfig
 }

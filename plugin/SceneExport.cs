@@ -10,12 +10,15 @@ internal static class SceneExport
         Stream output, IReadOnlyList<SceneObject> objects, SceneFrame frame, Presentation presentation)
     {
         long offset = 0;
-        var entries = objects.Select(obj =>
+        object Block(string id, byte[] payload)
         {
-            var entry = new { id = obj.Id.ToString("D"), offset, length = obj.Payload.LongLength };
-            offset = checked(offset + obj.Payload.LongLength);
+            var entry = new { id, offset, length = payload.LongLength };
+            offset = checked(offset + payload.LongLength);
             return entry;
-        }).ToArray();
+        }
+        var textures = presentation.Textures.ToArray();
+        var entries = objects.Select(obj => Block(obj.Id.ToString("D"), obj.Payload)).ToArray();
+        var textureEntries = textures.Select(pair => Block(pair.Key, pair.Value)).ToArray();
         var header = JsonSerializer.SerializeToUtf8Bytes(new
         {
             center = frame.Center.Array,
@@ -23,7 +26,8 @@ internal static class SceneExport
             background = presentation.Background,
             camera = SceneJson.Camera(presentation.Camera),
             materials = SceneJson.Materials(presentation),
-            objects = entries
+            objects = entries,
+            textures = textureEntries
         });
 
         using var writer = new BinaryWriter(output, Encoding.UTF8, true);
@@ -34,6 +38,8 @@ internal static class SceneExport
             writer.Write((byte)0);
         foreach (var obj in objects)
             output.Write(obj.Payload);
+        foreach (var (_, image) in textures)
+            output.Write(image);
     }
 
     // 작은 셸만 메모리에 읽는다. 컨테이너·base64 문자열·완성 HTML 사본은 만들지 않는다.

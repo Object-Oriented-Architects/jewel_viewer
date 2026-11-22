@@ -5,7 +5,7 @@ import { useThree } from '@react-three/fiber'
 import { Environment } from '@react-three/drei'
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'
 import * as THREE from 'three'
-import { createStudioEnvCube, isStudioPreset, type StudioPreset } from './studioEnv'
+import { createStudioEnvCube, isStudioPreset, type StudioPreset, type WhiteGemParams } from './studioEnv'
 
 export interface GemEnv {
   /** 보석 레이트레이서가 샘플하는 선명한 cube */
@@ -38,9 +38,10 @@ function equirectToMipmappedCube(gl: THREE.WebGLRenderer, equirect: THREE.Textur
 type LoadedEnv = { scene: THREE.Texture; gem: THREE.CubeTexture }
 
 /** 소스(스튜디오 프리셋·HDR URL) 하나를 금속용 scene 텍스처 + 보석용 mipmap cube로 만든다 — null이면 건너뜀 */
-function useLoadedEnv(source: string | null, resolution: number) {
+function useLoadedEnv(source: string | null, resolution: number, whiteGem: WhiteGemParams | undefined) {
   const gl = useThree((state) => state.gl)
   const [env, setEnv] = useState<LoadedEnv | null>(null)
+  const studioParams = source !== null && isStudioPreset(source) ? whiteGem : undefined
 
   useEffect(() => {
     if (source === null) return
@@ -48,7 +49,7 @@ function useLoadedEnv(source: string | null, resolution: number) {
     let cancelled = false
 
     if (isStudioPreset(source)) {
-      const cubeRT = createStudioEnvCube(gl, source, resolution)
+      const cubeRT = createStudioEnvCube(gl, source, resolution, studioParams)
       owned.push(cubeRT)
       setEnv({ scene: cubeRT.texture, gem: cubeRT.texture })
     } else {
@@ -69,7 +70,7 @@ function useLoadedEnv(source: string | null, resolution: number) {
       setEnv(null)
       owned.forEach((resource) => resource.dispose())
     }
-  }, [gl, source, resolution])
+  }, [gl, source, resolution, studioParams])
 
   return env
 }
@@ -83,6 +84,8 @@ interface GemEnvironmentProps {
    * 어두운 스튜디오를 따로 비추면 검은 facet 위에 하이라이트가 선다 (ijewel3d도 보석 전용 envMap을 쓴다)
    */
   gemSource?: StudioPreset | string
+  /** white_gem 스튜디오 조절값 — 객체가 바뀔 때마다 cube를 다시 만드니 memo해서 넘긴다 */
+  whiteGem?: WhiteGemParams
   /** 금속용 scene.environmentIntensity — 보석은 재질의 envMapIntensity를 따로 쓴다 */
   intensity?: number
   rotation?: THREE.Euler
@@ -100,6 +103,7 @@ interface GemEnvironmentProps {
 export function GemEnvironment({
   source,
   gemSource,
+  whiteGem,
   intensity = 1,
   rotation,
   gemRotation: gemOnlyRotation,
@@ -107,8 +111,8 @@ export function GemEnvironment({
   children,
 }: GemEnvironmentProps) {
   const separateGem = gemSource !== undefined && gemSource !== source
-  const env = useLoadedEnv(source, resolution)
-  const gemOnlyEnv = useLoadedEnv(separateGem ? gemSource : null, resolution)
+  const env = useLoadedEnv(source, resolution, whiteGem)
+  const gemOnlyEnv = useLoadedEnv(separateGem ? gemSource : null, resolution, whiteGem)
   const gemCube = separateGem ? gemOnlyEnv?.gem : env?.gem
 
   // three는 envMapRotation의 xyz를 반전해 샘플링한다 (render target cube·equirect 공통) — 같은 규약으로 맞춤

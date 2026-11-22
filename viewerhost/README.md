@@ -50,6 +50,6 @@ Probe uses a normal, non-activating off-screen window, not minimization. Measure
 
 ## Export format and validation
 
-Current viewer-live exports embed a gzip RVM2 object collection with a material table in an RVS1 container via `window.__SCENE_RVS`. The HTML packer inlines CSS, JavaScript and environment assets; this export path does not require rhino3dm or a CDN. The C4 host treats the HTML payload as opaque bytes. Render acceptance still requires checking page errors and the C5 pixel ratio, not just a successful probe exit.
+Current viewer-live exports embed a gzip RVM3 object collection (with UVs) plus original texture image blocks and a material table in an RVS1 container via `window.__SCENE_RVS`. The HTML packer inlines CSS, JavaScript and environment assets; this export path does not require rhino3dm or a CDN. The C4 host treats the HTML payload as opaque bytes. Render acceptance still requires checking page errors and the C5 pixel ratio, not just a successful probe exit.
 
 Not tested on a physically Runtime-free PC, ARM64 hardware, or a downloaded/MOTW-marked executable. The x64 build relies on x64 emulation on supported Windows ARM64, not native ARM64. Exports are unsigned, so SmartScreen reputation warnings remain a distribution issue. Ignore build artifacts `viewerhost/bin/`, `viewerhost/obj/` and local validation `temp/` (no .gitignore edits are made here).

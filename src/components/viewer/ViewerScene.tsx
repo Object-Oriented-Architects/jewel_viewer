@@ -25,7 +25,7 @@ import { LoadingSpinner } from '@/components/dom/LoadingSpinner'
 import { GemEnvironment } from '@/components/canvas/gem/GemEnvironment'
 import { tierDpr, tierMultisampling, type QualityTier } from '@/components/canvas/QualityTier'
 import { Ring } from '@/components/canvas/Models'
-import { LiveModel, LiveScene } from './LiveModel'
+import { LiveFloorShadow, LiveModel, LiveScene } from './LiveModel'
 import { decodeExport, type CameraPayload, type Manifest, type ExportScene } from './sceneProtocol'
 
 const TIER: QualityTier = 'desktop'
@@ -282,8 +282,8 @@ export default function ViewerScene({ liveOnly = false }: { liveOnly?: boolean }
         }
         runtime.mode = 'export'
         setMode('export')
-        const { manifest, blocks } = exported.current
-        live.reconcile(manifest, blocks)
+        const { manifest, blocks, textures } = exported.current
+        live.reconcile(manifest, blocks, textures)
         runtime.version = manifest.version
         setBackground(manifest.background)
         applyCamera(manifest.camera)
@@ -384,6 +384,7 @@ export default function ViewerScene({ liveOnly = false }: { liveOnly?: boolean }
         <GemEnvironment
           source={config.hdrPath}
           gemSource={config.light.gemStudioPreset}
+          whiteGem={config.light.whiteGem}
           intensity={config.light.environmentIntensity}
           rotation={envRotation}
           resolution={512}
@@ -395,7 +396,10 @@ export default function ViewerScene({ liveOnly = false }: { liveOnly?: boolean }
               </Suspense>
             </ModelBoundary>
           ) : (
-            <LiveModel scene={live} />
+            <>
+              <LiveModel scene={live} />
+              <LiveFloorShadow scene={live} />
+            </>
           )}
         </GemEnvironment>
         <EffectComposer multisampling={tierMultisampling(TIER)} enableNormalPass={false}>
