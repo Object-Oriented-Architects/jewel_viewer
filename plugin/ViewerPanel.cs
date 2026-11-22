@@ -8,7 +8,7 @@ using Rhino.Geometry;
 using Rhino.Render;
 using Rhino.UI;
 
-namespace RhinoViewer;
+namespace JewelViewer;
 
 [System.Runtime.InteropServices.Guid("9165DD25-D24B-4A73-BCE2-575780756703")]
 public sealed class ViewerPanel : Panel, IPanel
@@ -122,7 +122,7 @@ public sealed class ViewerPanel : Panel, IPanel
         _started = true;
         try
         {
-            var environment = Environment.GetEnvironmentVariable("RHINOVIEWER_WEBROOT");
+            var environment = Environment.GetEnvironmentVariable("JEWELVIEWER_WEBROOT");
             IStaticFileSource source;
             if (!string.IsNullOrWhiteSpace(environment) && Directory.Exists(environment) &&
                 File.Exists(Path.Combine(environment, "viewer-live", "index.html")))
@@ -159,7 +159,7 @@ public sealed class ViewerPanel : Panel, IPanel
             // 처음 보일 때 한 번만 발행한다. 이후 PanelShown은 깨끗한 장면을 다시 만들지 않는다.
             ResetDocument();
             _scene.Start();
-            RhinoApp.WriteLine($"RhinoViewer: 웹 루트={_root} 포트={_server.Port}");
+            RhinoApp.WriteLine($"JewelViewer: 웹 루트={_root} 포트={_server.Port}");
             _webView.Url = new Uri($"http://127.0.0.1:{_server.Port}/viewer-live/");
         }
         catch (Exception ex)
@@ -169,7 +169,7 @@ public sealed class ViewerPanel : Panel, IPanel
     }
 
     private static void OnSyncFailed(Exception error) =>
-        RhinoApp.WriteLine("RhinoViewer: 동기화 실패 — " + error.Message);
+        RhinoApp.WriteLine("JewelViewer: 동기화 실패 — " + error.Message);
 
     private void OnPublished(SceneFrame frame)
     {
@@ -449,14 +449,14 @@ public sealed class ViewerPanel : Panel, IPanel
         _pageGeneration++;
         _pull.ResetPage();
         ResetCameraTracking();
-        RhinoApp.WriteLine($"RhinoViewer: 페이지 로드 시작 {e.Uri}");
+        RhinoApp.WriteLine($"JewelViewer: 페이지 로드 시작 {e.Uri}");
     }
 
     private void OnDocumentLoaded(object? sender, WebViewLoadedEventArgs e)
     {
         _pageLoaded = true;
         ResetCameraTracking();
-        RhinoApp.WriteLine($"RhinoViewer: 페이지 로드 완료 {e.Uri}");
+        RhinoApp.WriteLine($"JewelViewer: 페이지 로드 완료 {e.Uri}");
         SignalPull();
     }
 
@@ -483,7 +483,7 @@ public sealed class ViewerPanel : Panel, IPanel
             {
                 _pull.Complete(request, false);
                 if (!_disposed)
-                    RhinoApp.WriteLine("RhinoViewer: 갱신 신호 JS 실패 — " + ex.Message);
+                    RhinoApp.WriteLine("JewelViewer: 갱신 신호 JS 실패 — " + ex.Message);
             });
         }
     }
@@ -511,7 +511,7 @@ public sealed class ViewerPanel : Panel, IPanel
             {
                 _cameraInFlight = false;
                 if (!_disposed)
-                    RhinoApp.WriteLine("RhinoViewer: 카메라 JS 실패 — " + ex.Message);
+                    RhinoApp.WriteLine("JewelViewer: 카메라 JS 실패 — " + ex.Message);
             });
         }
     }
@@ -561,7 +561,7 @@ public sealed class ViewerPanel : Panel, IPanel
     }
 
     /// <summary>
-    /// RhinoViewerDiagnostics — 패널이 실제로 무엇을 보고 있는지 Rhino 명령줄에 찍는다.
+    /// JewelViewerDiagnostics — 패널이 실제로 무엇을 보고 있는지 Rhino 명령줄에 찍는다.
     /// Eto 핸들러·WebView2 초기화 상태·페이지 상태를 함께 노출한다.
     /// </summary>
     public async void ReportState()
@@ -601,8 +601,8 @@ public sealed class ViewerPanel : Panel, IPanel
 
     private void ShowError(string message)
     {
-        RhinoApp.WriteLine("RhinoViewer: " + message.Replace("\n", " "));
-        Content = new Label { Text = "RhinoViewer\n\n" + message };
+        RhinoApp.WriteLine("JewelViewer: " + message.Replace("\n", " "));
+        Content = new Label { Text = "JewelViewer\n\n" + message };
     }
 
     protected override void Dispose(bool disposing)

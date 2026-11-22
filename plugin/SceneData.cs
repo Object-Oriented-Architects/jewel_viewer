@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 
-namespace RhinoViewer;
+namespace JewelViewer;
 
 internal readonly record struct Vec3(double X, double Y, double Z)
 {

@@ -22,7 +22,7 @@
  * 에셋(3dm/HDR/그림자 텍스처)은 fetch·XHR 훅으로 내장 data: URL 을 돌려준다.
  * file:// 에서는 경로가 '/C:/...' 로 해석되므로 정확 일치 대신 접미사로 매칭한다.
  *
- * 사용: node tools/pack-single-html.mjs [--page viewer] [--out dist/rhinoviewer.html]
+ * 사용: node tools/pack-single-html.mjs [--page viewer] [--out dist/jewelviewer.html]
  */
 
 import fs from 'node:fs'
@@ -42,7 +42,7 @@ const page = argOf('--page', 'viewer')
 // --no-scene: 샘플 3dm 을 넣지 않는다 (플러그인 export shell — 씬은 export 시 주입된다)
 const noScene = args.includes('--no-scene')
 const includeRhino3dm = page !== 'viewer-live'
-const outFile = path.resolve(repoRoot, argOf('--out', 'dist/rhinoviewer.html'))
+const outFile = path.resolve(repoRoot, argOf('--out', 'dist/jewelviewer.html'))
 const outDir = path.join(repoRoot, 'out')
 const pageHtml = path.join(outDir, page, 'index.html')
 

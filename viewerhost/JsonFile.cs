@@ -2,7 +2,7 @@ using System.IO;
 using System.Text;
 using System.Web.Script.Serialization;
 
-namespace RhinoViewerHost
+namespace JewelViewerHost
 {
     internal static class JsonFile
     {

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 
-namespace RhinoViewerHost
+namespace JewelViewerHost
 {
     internal static class Loader
     {
@@ -12,7 +12,7 @@ namespace RhinoViewerHost
         {
             // The project is deliberately x64, including on Windows ARM64 under x64 emulation.
             if (!Environment.Is64BitProcess)
-                throw new PlatformNotSupportedException("RhinoViewerHost requires a 64-bit process.");
+                throw new PlatformNotSupportedException("JewelViewerHost requires a 64-bit process.");
             string version = Assembly.GetExecutingAssembly().GetCustomAttributes<AssemblyMetadataAttribute>()
                 .Single(a => a.Key == "WebView2SdkVersion").Value;
             string folder = Path.Combine(Payload.LocalRoot, "bin", version, "x64");

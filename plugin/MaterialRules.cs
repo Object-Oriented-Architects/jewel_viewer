@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace RhinoViewer;
+namespace JewelViewer;
 
 internal enum MaterialSource { Layer, Object, Parent }
 internal enum MaterialEvent { Changed, Added, Deleted, Replaced }

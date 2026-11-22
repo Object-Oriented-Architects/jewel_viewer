@@ -1,7 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 
-namespace RhinoViewer;
+namespace JewelViewer;
 
 /// <summary>시험·통합 하네스 전용 C6 디코더. 플러그인 어셈블리에는 포함하지 않는다.</summary>
 internal static class MeshPayloadReader

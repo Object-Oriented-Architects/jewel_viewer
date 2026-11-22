@@ -1,7 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 
-namespace RhinoViewer;
+namespace JewelViewer;
 
 internal sealed record MeshPart(byte Kind, Guid MaterialId, float[] Positions, float[] Normals, uint[] Indices);
 

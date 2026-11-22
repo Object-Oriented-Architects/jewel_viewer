@@ -1,6 +1,6 @@
-const title = 'Rhino Viewer'
+const title = 'Jewel Viewer'
 const url = 'https://rhino-viewer.vercel.app/'
-const description = 'Rhino Viewer'
+const description = 'Jewel Viewer'
 const author = 'OOA'
 
 export default function Head() {
@@ -17,7 +17,7 @@ export default function Head() {
       {/* Search Engine Optimization Meta Tags */}
       <title>{title}</title>
       <meta name='description' content={description} />
-      <meta name='keywords' content='Rhino Viewer' />
+      <meta name='keywords' content='Jewel Viewer' />
       <meta name='robots' content='index,follow' />
       <meta name='distribution' content='web' />
       {/* 

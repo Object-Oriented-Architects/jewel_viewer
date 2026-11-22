@@ -1,6 +1,6 @@
 using Eto.Forms;
 
-namespace RhinoViewer;
+namespace JewelViewer;
 
 /// <summary>플러그인의 UI 커밋과 로그를 한 경로로 마샬링한다.</summary>
 internal sealed class RhinoDispatcher : ISceneDispatcher

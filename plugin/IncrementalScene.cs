@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace RhinoViewer;
+namespace JewelViewer;
 
 internal interface ISceneSnapshot : IDisposable
 {

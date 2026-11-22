@@ -2,8 +2,8 @@ import { Layout } from '@/components/dom/Layout'
 import '@/global.css'
 
 export const metadata = {
-  title: 'Rhino Viewer',
-  description: 'Rhino Viewer',
+  title: 'Jewel Viewer',
+  description: 'Jewel Viewer',
 }
 
 export default function RootLayout({ children }) {

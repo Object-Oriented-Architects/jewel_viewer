@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json;
 
-namespace RhinoViewer;
+namespace JewelViewer;
 
 /// <summary>C1 카메라 직렬화. Rhino 객체와 현재 지역 숫자 형식에 의존하지 않는다.</summary>
 internal static class CameraPayload

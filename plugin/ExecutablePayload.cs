@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
 
-namespace RhinoViewer;
+namespace JewelViewer;
 
 /// <summary>C4: 템플릿 + UTF-8 HTML + Int64 LE 바이트 길이 + ASCII 매직.</summary>
 internal static class ExecutablePayload

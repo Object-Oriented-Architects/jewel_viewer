@@ -9,7 +9,7 @@ using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
-namespace RhinoViewerHost
+namespace JewelViewerHost
 {
     internal sealed class ViewerWindow : Form
     {
@@ -85,7 +85,7 @@ namespace RhinoViewerHost
                 core.Settings.AreDevToolsEnabled = false;
                 core.Settings.AreDefaultContextMenusEnabled = false;
                 core.NewWindowRequested += OnNewWindowRequested;
-                core.SetVirtualHostNameToFolderMapping("rhinoviewer.example", scene.Root,
+                core.SetVirtualHostNameToFolderMapping("jewelviewer.example", scene.Root,
                     CoreWebView2HostResourceAccessKind.Allow);
 
                 if (options.Probe)
@@ -107,14 +107,14 @@ namespace RhinoViewerHost
                         if (e.IsSuccess) navigation.TrySetResult(true);
                         else navigation.TrySetException(new IOException("Navigation failed: " + e.WebErrorStatus));
                     };
-                    core.Navigate("https://rhinoviewer.example/" + scene.Hash + "/index.html");
+                    core.Navigate("https://jewelviewer.example/" + scene.Hash + "/index.html");
                     await Within(navigation.Task);
                     await ProbeAsync();
                     exitCode = 0;
                     Close();
                 }
                 else
-                    core.Navigate("https://rhinoviewer.example/" + scene.Hash + "/index.html");
+                    core.Navigate("https://jewelviewer.example/" + scene.Hash + "/index.html");
             }
             catch (Exception ex)
             {

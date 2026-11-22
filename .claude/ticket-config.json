@@ -10,10 +10,10 @@
       ],
       "commands": [
         "pnpm build:shell",
-        "dotnet build viewerhost/RhinoViewerHost.csproj -c Release",
+        "dotnet build viewerhost/JewelViewerHost.csproj -c Release",
         "dotnet run --project plugin-tests/PluginTests.csproj",
         "node tools/test-scene-materials.mjs temp/plugin-tests/material.rvm temp/plugin-tests/material.json",
-        "dotnet build plugin/RhinoViewer.csproj -c Release"
+        "dotnet build plugin/JewelViewer.csproj -c Release"
       ]
     }
   }

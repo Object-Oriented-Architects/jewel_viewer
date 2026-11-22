@@ -4,7 +4,7 @@ using Rhino.Display;
 using Rhino.DocObjects;
 using Rhino.Geometry;
 
-namespace RhinoViewer;
+namespace JewelViewer;
 
 internal static class SceneSync
 {

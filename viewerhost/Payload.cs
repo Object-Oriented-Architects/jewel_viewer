@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 
-namespace RhinoViewerHost
+namespace JewelViewerHost
 {
     internal sealed class Scene
     {
@@ -18,7 +18,7 @@ namespace RhinoViewerHost
     {
         public static string LocalRoot
         {
-            get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RhinoViewerHost"); }
+            get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "JewelViewerHost"); }
         }
 
         public static Scene Extract(string exe)
@@ -42,7 +42,7 @@ namespace RhinoViewerHost
                 string folder = Path.Combine(LocalRoot, "scenes", hash);
                 string index = Path.Combine(folder, "index.html");
                 bool owns = false;
-                using (var mutex = new Mutex(false, "Local\\RhinoViewerHost-scene-" + hash))
+                using (var mutex = new Mutex(false, "Local\\JewelViewerHost-scene-" + hash))
                 {
                     try
                     {

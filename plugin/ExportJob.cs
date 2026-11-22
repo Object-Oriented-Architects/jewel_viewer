@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using Rhino;
 
-namespace RhinoViewer;
+namespace JewelViewer;
 
 /// <summary>
 /// 메시화와 대용량 파일 쓰기 중에도 Rhino 명령줄을 막지 않는다.
@@ -67,8 +67,8 @@ internal static class ExportJob
             }
             Interlocked.Exchange(ref _running, 0);
             RhinoApp.WriteLine(error == null
-                ? $"RhinoViewerExport: {_target} — 객체 {count}개"
-                : "RhinoViewerExport: 실패 — " + error.Message);
+                ? $"JewelViewerExport: {_target} — 객체 {count}개"
+                : "JewelViewerExport: 실패 — " + error.Message);
         }
 
         private void ReleaseSnapshots()

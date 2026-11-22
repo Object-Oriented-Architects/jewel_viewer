@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 
-namespace RhinoViewerHost
+namespace JewelViewerHost
 {
     internal static class Program
     {
@@ -74,7 +74,7 @@ namespace RhinoViewerHost
                 if (options != null && options.Probe)
                     JsonFile.Write(options.ProbePath, new { error = "startup-failed", message = ex.ToString(), elapsedMs = elapsed.ElapsedMilliseconds });
                 else
-                    MessageBox.Show(ex.Message, "RhinoViewerHost", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show(ex.Message, "JewelViewerHost", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return 1;
             }
         }
@@ -101,7 +101,7 @@ namespace RhinoViewerHost
                     result.WaitMs = wait;
                 }
                 else
-                    throw new ArgumentException("Usage: RhinoViewerHost.exe [--probe <out.json> [--wait <ms>]]");
+                    throw new ArgumentException("Usage: JewelViewerHost.exe [--probe <out.json> [--wait <ms>]]");
             }
             return result;
         }

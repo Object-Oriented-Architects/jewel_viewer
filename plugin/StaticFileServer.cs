@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace RhinoViewer;
+namespace JewelViewer;
 
 /// <summary>
 /// 정적 파일 서버 (loopback 전용, 포트 자동 할당).

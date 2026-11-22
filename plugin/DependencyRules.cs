@@ -1,4 +1,4 @@
-namespace RhinoViewer;
+namespace JewelViewer;
 
 internal sealed record ObjectDependency(Guid Id, Guid Layer, Guid? Definition, bool IsDefinitionGeometry);
 

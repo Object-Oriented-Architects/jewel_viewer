@@ -1,11 +1,11 @@
 using System.IO.Compression;
 using System.Text;
 
-namespace RhinoViewer;
+namespace JewelViewer;
 
 internal static class EmbeddedAssets
 {
-    internal const string ResourceName = "RhinoViewer.Assets.zip";
+    internal const string ResourceName = "JewelViewer.Assets.zip";
 
     private static Stream OpenBundle() =>
         typeof(EmbeddedAssets).Assembly.GetManifestResourceStream(ResourceName)
@@ -45,11 +45,11 @@ internal static class EmbeddedAssets
     {
         // 내보내기 한 번에 ZIP을 한 번만 열고 필요한 항목만 읽는다.
         using var archive = new ZipArchive(bundle, ZipArchiveMode.Read, leaveOpen: true);
-        using var stream = new MemoryStream(ReadEntry(Required(archive, "rhinoviewer-shell.html")), writable: false);
+        using var stream = new MemoryStream(ReadEntry(Required(archive, "jewelviewer-shell.html")), writable: false);
         using var reader = new StreamReader(stream, new UTF8Encoding(false, true));
         var shell = reader.ReadToEnd();
         var template = executable
-            ? new MemoryStream(ReadEntry(Required(archive, "RhinoViewerHost.exe")), writable: false)
+            ? new MemoryStream(ReadEntry(Required(archive, "JewelViewerHost.exe")), writable: false)
             : null;
         return (shell, template);
     }

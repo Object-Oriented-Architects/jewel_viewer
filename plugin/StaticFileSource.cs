@@ -1,4 +1,4 @@
-namespace RhinoViewer;
+namespace JewelViewer;
 
 internal interface IStaticFileSource
 {

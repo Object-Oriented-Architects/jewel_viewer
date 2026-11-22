@@ -1,6 +1,6 @@
 using System.IO.Compression;
 using System.Text;
-using RhinoViewer;
+using JewelViewer;
 
 internal static partial class Program
 {
@@ -40,8 +40,8 @@ internal static partial class Program
         using var bundle = Bundle(
             ("web/viewer-live/index.html", html),
             ("web/empty.txt", Array.Empty<byte>()),
-            ("rhinoviewer-shell.html", Encoding.UTF8.GetBytes(shell)),
-            ("RhinoViewerHost.exe", template));
+            ("jewelviewer-shell.html", Encoding.UTF8.GetBytes(shell)),
+            ("JewelViewerHost.exe", template));
         var source = EmbeddedAssets.ReadWeb(bundle);
         Check(bundle.CanRead, "묶음 입력의 소유권을 가져가면 안 됩니다");
         using (var page = source.OpenRead("viewer-live/index.html"))
@@ -51,7 +51,7 @@ internal static partial class Program
             page!.CopyTo(bytes);
             Bytes(html, bytes.ToArray());
         }
-        Check(source.OpenRead("rhinoviewer-shell.html") == null);
+        Check(source.OpenRead("jewelviewer-shell.html") == null);
         Check(source.OpenRead("missing") == null);
         using (var empty = source.OpenRead("empty.txt")) Equal(0L, empty!.Length);
         bundle.Position = 0;
@@ -73,7 +73,7 @@ internal static partial class Program
         InvalidBundle(() => EmbeddedAssets.ReadExport(missing, executable: false));
         missing.Position = 0;
         InvalidBundle(() => EmbeddedAssets.ReadExport(missing, executable: true));
-        using var shellOnly = Bundle(("rhinoviewer-shell.html", Encoding.UTF8.GetBytes(shell)));
+        using var shellOnly = Bundle(("jewelviewer-shell.html", Encoding.UTF8.GetBytes(shell)));
         Equal(shell, EmbeddedAssets.ReadExport(shellOnly, executable: false).Shell);
         shellOnly.Position = 0;
         InvalidBundle(() => EmbeddedAssets.ReadExport(shellOnly, executable: true));

@@ -1,4 +1,4 @@
-namespace RhinoViewer;
+namespace JewelViewer;
 
 internal readonly record struct PullRequest(long Revision, long Page, int Attempt);
 

@@ -22,6 +22,6 @@ run(path.join(root, 'tools/pack-single-html.mjs'), [
   'viewer-live',
   '--no-scene',
   '--out',
-  'dist/rhinoviewer-shell.html',
+  'dist/jewelviewer-shell.html',
 ])
 run(path.join(root, 'tools/pack-plugin-web.mjs'))

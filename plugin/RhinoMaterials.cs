@@ -2,7 +2,7 @@ using Rhino;
 using Rhino.DocObjects;
 using Rhino.Render;
 
-namespace RhinoViewer;
+namespace JewelViewer;
 
 /// <summary>문서 UI 스레드에서만 해석·시뮬레이션하며 메시 캐시와는 독립적으로 유지한다.</summary>
 internal sealed class RhinoMaterials
@@ -54,7 +54,7 @@ internal sealed class RhinoMaterials
             catch (Exception ex)
             {
                 // 시뮬레이션 오류도 객체를 버리지 않는다. 해당 재질 변경 시 다시 시도한다.
-                RhinoApp.WriteLine("RhinoViewer: 재질 읽기 실패 — " + ex.Message);
+                RhinoApp.WriteLine("JewelViewer: 재질 읽기 실패 — " + ex.Message);
                 return _descriptors[id] = MaterialDescriptor.Create(kind, new(1, 1, 1));
             }
         }

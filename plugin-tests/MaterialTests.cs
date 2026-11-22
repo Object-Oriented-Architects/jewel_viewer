@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
-using RhinoViewer;
+using JewelViewer;
 
 internal static partial class Program
 {

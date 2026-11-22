@@ -5,13 +5,13 @@ using Rhino.Commands;
 using Rhino.UI;
 using RhinoCommand = Rhino.Commands.Command;
 
-namespace RhinoViewer;
+namespace JewelViewer;
 
-/// <summary>RhinoViewer — 뷰어 패널을 연다.</summary>
+/// <summary>JewelViewer — 뷰어 패널을 연다.</summary>
 [CommandStyle(Style.ScriptRunner)]
 public sealed class ViewerCommand : RhinoCommand
 {
-    public override string EnglishName => "RhinoViewer";
+    public override string EnglishName => "JewelViewer";
 
     protected override Result RunCommand(RhinoDoc doc, RunMode mode)
     {
@@ -21,18 +21,18 @@ public sealed class ViewerCommand : RhinoCommand
 }
 
 /// <summary>
-/// RhinoViewerDiagnostics — 패널/WebView2 상태를 커맨드라인에 출력한다.
+/// JewelViewerDiagnostics — 패널/WebView2 상태를 커맨드라인에 출력한다.
 /// </summary>
 [CommandStyle(Style.ScriptRunner)]
 public sealed class DiagnosticsCommand : RhinoCommand
 {
-    public override string EnglishName => "RhinoViewerDiagnostics";
+    public override string EnglishName => "JewelViewerDiagnostics";
 
     protected override Result RunCommand(RhinoDoc doc, RunMode mode)
     {
         if (Panels.GetPanel<ViewerPanel>(doc) is not ViewerPanel panel)
         {
-            RhinoApp.WriteLine("RhinoViewerDiagnostics: 패널이 열려 있지 않습니다. RhinoViewer 를 먼저 실행하세요.");
+            RhinoApp.WriteLine("JewelViewerDiagnostics: 패널이 열려 있지 않습니다. JewelViewer 를 먼저 실행하세요.");
             return Result.Failure;
         }
 
@@ -41,46 +41,46 @@ public sealed class DiagnosticsCommand : RhinoCommand
     }
 }
 
-/// <summary>RhinoViewerSync — 캐시를 비우고 보이는 전체를 다시 동기화한다.</summary>
+/// <summary>JewelViewerSync — 캐시를 비우고 보이는 전체를 다시 동기화한다.</summary>
 [CommandStyle(Style.ScriptRunner)]
 public sealed class SyncCommand : RhinoCommand
 {
-    public override string EnglishName => "RhinoViewerSync";
+    public override string EnglishName => "JewelViewerSync";
 
     protected override Result RunCommand(RhinoDoc doc, RunMode mode)
     {
         if (Panels.GetPanel<ViewerPanel>(doc) is not ViewerPanel panel)
         {
-            RhinoApp.WriteLine("RhinoViewerSync: 패널이 열려 있지 않습니다. RhinoViewer 를 먼저 실행하세요.");
+            RhinoApp.WriteLine("JewelViewerSync: 패널이 열려 있지 않습니다. JewelViewer 를 먼저 실행하세요.");
             return Result.Failure;
         }
 
         if (!panel.ResyncAll())
         {
-            RhinoApp.WriteLine("RhinoViewerSync: 뷰어가 아직 시작되지 않았습니다. 패널이 화면에 보이면 시작됩니다.");
+            RhinoApp.WriteLine("JewelViewerSync: 뷰어가 아직 시작되지 않았습니다. 패널이 화면에 보이면 시작됩니다.");
             return Result.Failure;
         }
-        RhinoApp.WriteLine("RhinoViewerSync: 전체 재동기화를 요청했습니다.");
+        RhinoApp.WriteLine("JewelViewerSync: 전체 재동기화를 요청했습니다.");
         return Result.Success;
     }
 }
 
-/// <summary>RhinoViewerCameraSync — 카메라 동기화를 켜거나 끈다.</summary>
+/// <summary>JewelViewerCameraSync — 카메라 동기화를 켜거나 끈다.</summary>
 [CommandStyle(Style.ScriptRunner)]
 public sealed class CameraSyncCommand : RhinoCommand
 {
-    public override string EnglishName => "RhinoViewerCameraSync";
+    public override string EnglishName => "JewelViewerCameraSync";
 
     protected override Result RunCommand(RhinoDoc doc, RunMode mode)
     {
         if (Panels.GetPanel<ViewerPanel>(doc) is not ViewerPanel panel)
         {
-            RhinoApp.WriteLine("RhinoViewerCameraSync: 패널이 열려 있지 않습니다. RhinoViewer 를 먼저 실행하세요.");
+            RhinoApp.WriteLine("JewelViewerCameraSync: 패널이 열려 있지 않습니다. JewelViewer 를 먼저 실행하세요.");
             return Result.Failure;
         }
 
         panel.CameraSyncEnabled = !panel.CameraSyncEnabled;
-        RhinoApp.WriteLine("RhinoViewerCameraSync: 카메라 동기화 " + (panel.CameraSyncEnabled ? "켜짐" : "꺼짐"));
+        RhinoApp.WriteLine("JewelViewerCameraSync: 카메라 동기화 " + (panel.CameraSyncEnabled ? "켜짐" : "꺼짐"));
         return Result.Success;
     }
 }
@@ -89,16 +89,16 @@ public sealed class CameraSyncCommand : RhinoCommand
 [CommandStyle(Style.ScriptRunner)]
 public sealed class ExportCommand : RhinoCommand
 {
-    public override string EnglishName => "RhinoViewerExport";
+    public override string EnglishName => "JewelViewerExport";
 
     protected override Result RunCommand(RhinoDoc doc, RunMode mode)
     {
         var dialog = new Rhino.UI.SaveFileDialog
         {
-            Title = "RhinoViewer HTML / 실행 파일 내보내기",
+            Title = "JewelViewer HTML / 실행 파일 내보내기",
             Filter = "HTML (*.html)|*.html|실행 파일 (*.exe)|*.exe",
             DefaultExt = "html",
-            FileName = "rhinoviewer.html",
+            FileName = "jewelviewer.html",
         };
         if (!dialog.ShowSaveDialog())
             return Result.Cancel;
@@ -108,18 +108,18 @@ public sealed class ExportCommand : RhinoCommand
         var executable = extension.Equals(".exe", StringComparison.OrdinalIgnoreCase);
         if (!executable && !extension.Equals(".html", StringComparison.OrdinalIgnoreCase))
         {
-            RhinoApp.WriteLine("RhinoViewerExport: .html 또는 .exe 확장자를 고르세요.");
+            RhinoApp.WriteLine("JewelViewerExport: .html 또는 .exe 확장자를 고르세요.");
             return Result.Failure;
         }
         try
         {
             ExportJob.Start(doc, target, executable);
-            RhinoApp.WriteLine("RhinoViewerExport: 내보내기를 시작했습니다. 완료 결과는 명령줄에 표시됩니다.");
+            RhinoApp.WriteLine("JewelViewerExport: 내보내기를 시작했습니다. 완료 결과는 명령줄에 표시됩니다.");
             return Result.Success;
         }
         catch (Exception ex)
         {
-            RhinoApp.WriteLine($"RhinoViewerExport: 실패 — {ex.Message}");
+            RhinoApp.WriteLine($"JewelViewerExport: 실패 — {ex.Message}");
             return Result.Failure;
         }
     }

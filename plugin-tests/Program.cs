@@ -7,7 +7,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using RhinoViewer;
+using JewelViewer;
 
 internal static partial class Program
 {

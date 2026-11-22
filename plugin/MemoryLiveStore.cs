@@ -1,4 +1,4 @@
-namespace RhinoViewer;
+namespace JewelViewer;
 
 /// <summary>
 /// 발행과 조회는 같은 락 안에서 한다. 공개한 바이트열은 불변이며 최근 두 매니페스트의 참조를 보관한다.
